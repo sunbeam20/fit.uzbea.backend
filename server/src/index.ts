@@ -19,18 +19,24 @@ import authRoutes from "./routes/authRoutes";
 // CONFIGURATIONS
 dotenv.config();
 const app = express();
-// Middleware
-app.use(cors({
-  origin: ['https://fit-uzbea-frontend.vercel.app', 'http://localhost:3000'],
-  credentials: true
-}));
-app.use(express.json());
+
+// Middleware - REMOVED DUPLICATE CORS
 app.use(helmet());
-app.use(helmet.crossOriginResourcePolicy({policy: "cross-origin"}));
+app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 app.use(morgan("common"));
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: false}));
-app.use(cors());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(cors({
+  origin: [
+    'https://fit-uzbea-frontend.vercel.app',
+    'http://localhost:3000',
+    'https://billing.ebnhost.com'  // Add your future domain
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+app.use(express.json());
 
 // ROUTES
 app.use("/api/dashboard", dashboardRoutes);
@@ -47,7 +53,18 @@ app.use("/api/auth", authRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
-  res.json({ message: 'Fit Uzbea Backend API' });
+  res.json({ 
+    message: 'Fit Uzbea Backend API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: [
+      '/api/auth',
+      '/api/dashboard',
+      '/api/product',
+      '/api/categories',
+      '/api/health'
+    ]
+  });
 });
 
 // Health check
@@ -55,21 +72,43 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    service: 'Fit Uzbea Backend'
+    service: 'Fit Uzbea Backend',
+    uptime: process.uptime()
   });
 });
 
-// Error handling
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error', details: err.message });
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ 
+    error: 'Route not found',
+    path: req.originalUrl,
+    method: req.method,
+    availableRoutes: [
+      'GET /',
+      'GET /api/health',
+      'POST /api/auth/login',
+      'GET /api/dashboard',
+      'GET /api/product'
+    ]
+  });
 });
 
-// Export for Vercel
+// Error handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err.stack);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
+});
+
+// Export for Vercel - MUST BE THE DEFAULT EXPORT
 export default app;
 
-// SERVER
-const port = process.env.PORT || 3001;
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+// Local development only - Vercel ignores this
+if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+  const port = process.env.PORT || 3001;
+  app.listen(port, () => {
+    console.log(`🚀 Server running on http://localhost:${port}`);
+  });
+}
