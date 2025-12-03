@@ -20,7 +20,7 @@ import authRoutes from "./routes/authRoutes";
 dotenv.config();
 const app = express();
 
-// Middleware - REMOVED DUPLICATE CORS
+// Middleware
 app.use(helmet());
 app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 app.use(morgan("common"));
@@ -29,12 +29,10 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors({
   origin: [
     'https://fit-uzbea-frontend.vercel.app',
-    'http://localhost:3000',
-    'https://billing.ebnhost.com'  // Add your future domain
+    'http://localhost:3000'
   ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
 }));
 app.use(express.json());
 
@@ -56,14 +54,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Fit Uzbea Backend API',
     version: '1.0.0',
-    status: 'running',
-    endpoints: [
-      '/api/auth',
-      '/api/dashboard',
-      '/api/product',
-      '/api/categories',
-      '/api/health'
-    ]
+    status: 'running'
   });
 });
 
@@ -72,8 +63,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    service: 'Fit Uzbea Backend',
-    uptime: process.uptime()
+    service: 'Fit Uzbea Backend'
   });
 });
 
@@ -81,34 +71,25 @@ app.get('/api/health', (req, res) => {
 app.use('*', (req, res) => {
   res.status(404).json({ 
     error: 'Route not found',
-    path: req.originalUrl,
-    method: req.method,
-    availableRoutes: [
-      'GET /',
-      'GET /api/health',
-      'POST /api/auth/login',
-      'GET /api/dashboard',
-      'GET /api/product'
-    ]
+    path: req.originalUrl
   });
 });
 
 // Error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err.stack);
+  console.error('Error:', err.message);
   res.status(500).json({ 
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    error: 'Internal server error'
   });
 });
 
-// Export for Vercel - MUST BE THE DEFAULT EXPORT
+// Export for Vercel
 export default app;
 
-// Local development only - Vercel ignores this
-if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+// Only run server locally, not on Vercel
+if (require.main === module) {
   const port = process.env.PORT || 3001;
   app.listen(port, () => {
-    console.log(`🚀 Server running on http://localhost:${port}`);
+    console.log(`Server running on port ${port}`);
   });
 }
