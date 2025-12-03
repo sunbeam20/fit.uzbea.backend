@@ -19,6 +19,11 @@ import authRoutes from "./routes/authRoutes";
 // CONFIGURATIONS
 dotenv.config();
 const app = express();
+// Middleware
+app.use(cors({
+  origin: ['https://fit-uzbea-frontend.vercel.app', 'http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json());
 app.use(helmet());
 app.use(helmet.crossOriginResourcePolicy({policy: "cross-origin"}));
@@ -39,6 +44,29 @@ app.use("/api/sale", salesRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/purchase", purchaseRoutes);
 app.use("/api/auth", authRoutes);
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ message: 'Fit Uzbea Backend API' });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    service: 'Fit Uzbea Backend'
+  });
+});
+
+// Error handling
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Internal server error', details: err.message });
+});
+
+// Export for Vercel
+export default app;
 
 // SERVER
 const port = process.env.PORT || 3001;
