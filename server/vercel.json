@@ -2,14 +2,20 @@
   "version": 2,
   "builds": [
     {
-      "src": "dist/index.js",  // Built JavaScript file
-      "use": "@vercel/node"
+      "src": "src/index.ts",  // Changed: Use TypeScript directly
+      "use": "@vercel/node",
+      "config": {
+        "maxLambdaSize": "10mb"
+      }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "/src/index.ts"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
