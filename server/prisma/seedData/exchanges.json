@@ -1,0 +1,10 @@
+[
+  {
+    "totalPaid": 0,
+    "totalPayback": 200,
+    "note": "Customer exchanged mouse for keyboard",
+    "sales_id": 1,
+    "user_id": 2,
+    "customer_id": 1
+  }
+]

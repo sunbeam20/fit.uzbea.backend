@@ -1,0 +1,4 @@
+[
+  { "quantity": 5,  "unitPrice": 80000, "purchase_id": 1, "product_id": 1 },
+  { "quantity": 10, "unitPrice": 500,   "purchase_id": 1, "product_id": 2 }
+]

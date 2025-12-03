@@ -1,0 +1,268 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Roles {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  Users Users[]
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+// Update your Users model to include timestamps and status
+model Users {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  status    Status   @default(Active)
+  role_id   Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Roles    Roles?    @relation(fields: [role_id], references: [id])
+  Session  Session[]
+  
+  // Your existing relations...
+  Sales           Sales[]
+  SalesReturn     SalesReturn[]
+  Exchanges       Exchanges[]
+  Purchases       Purchases[]
+  PurchasesReturn PurchasesReturn[]
+  Services        Services[]
+}
+
+enum Status {
+  Active
+  Inactive
+}
+
+model Customers {
+  id      Int     @id @default(autoincrement())
+  name    String
+  email   String? @unique
+  phone   String
+  address String?
+
+  Sales       Sales[]
+  SalesReturn SalesReturn[]
+  Exchanges   Exchanges[]
+  Services    Services[]
+}
+
+model Suppliers {
+  id      Int     @id @default(autoincrement())
+  name    String
+  email   String? @unique
+  phone   String
+  address String?
+
+  Purchases       Purchases[]
+  PurchasesReturn PurchasesReturn[]
+}
+
+model Categories {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  Products Products[]
+}
+
+model Products {
+  id             Int        @id @default(autoincrement())
+  name           String
+  specification  String?
+  description    String?
+  quantity       Int
+  purchasePrice  Decimal
+  wholesalePrice Decimal
+  retailPrice    Decimal
+  serial         String
+  warranty       Warranty
+  category_id    Int
+
+  Categories Categories? @relation(fields: [category_id], references: [id])
+
+  SalesItems          SalesItems[]
+  SalesReturnItems    SalesReturnItems[]
+  exchangeItemsOld    ExchangesItems[]      @relation("OldProductExchangeItems")
+  exchangeItemsNew    ExchangesItems[]      @relation("NewProductExchangeItems")
+  PurchasesItems      PurchasesItems[]
+  PurchasesReturnItems PurchasesReturnItems[]
+}
+
+enum Warranty {
+  Yes
+  No
+}
+
+model Sales {
+  id          Int      @id @default(autoincrement())
+  totalAmount Decimal
+  totalPaid   Decimal
+  dueDate     DateTime
+  customer_id Int?
+  user_id     Int
+
+  Customers Customers? @relation(fields: [customer_id], references: [id])
+  Users     Users?     @relation(fields: [user_id], references: [id])
+
+  SalesItems  SalesItems[]
+  SalesReturn SalesReturn[]
+  Exchanges   Exchanges[]
+}
+
+model SalesItems {
+  id         Int     @id @default(autoincrement())
+  quantity   Int
+  unitPrice  Decimal
+  sales_id   Int
+  product_id Int
+
+  Sales    Sales?    @relation(fields: [sales_id], references: [id])
+  Products Products? @relation(fields: [product_id], references: [id])
+}
+
+model SalesReturn {
+  id            Int     @id @default(autoincrement())
+  total_payback Decimal
+  note          String
+  sales_id      Int
+  user_id       Int
+  customer_id   Int
+
+  Sales     Sales     @relation(fields: [sales_id], references: [id])
+  Users     Users     @relation(fields: [user_id], references: [id])
+  Customers Customers @relation(fields: [customer_id], references: [id])
+
+  SalesReturnItems SalesReturnItems[]
+}
+
+model SalesReturnItems {
+  id             Int     @id @default(autoincrement())
+  quantity       Int
+  unitPrice      Decimal
+  product_id     Int
+  salesReturn_id Int
+
+  Products    Products?    @relation(fields: [product_id], references: [id])
+  SalesReturn SalesReturn? @relation(fields: [salesReturn_id], references: [id])
+}
+
+model Exchanges {
+  id           Int     @id @default(autoincrement())
+  totalPaid    Decimal
+  totalPayback Decimal
+  note         String
+  sales_id     Int
+  user_id      Int
+  customer_id  Int
+
+  Sales     Sales?     @relation(fields: [sales_id], references: [id])
+  Users     Users?     @relation(fields: [user_id], references: [id])
+  Customers Customers? @relation(fields: [customer_id], references: [id])
+
+  ExchangeItems ExchangesItems[]
+}
+
+model ExchangesItems {
+  id            Int     @id @default(autoincrement())
+  quantity      Int
+  unitPrice     Decimal
+  note          String
+  oldProduct_id Int
+  newProduct_id Int
+  exchangeId    Int?
+
+  oldProduct Products?  @relation("OldProductExchangeItems", fields: [oldProduct_id], references: [id])
+  newProduct Products?  @relation("NewProductExchangeItems", fields: [newProduct_id], references: [id])
+  Exchanges  Exchanges? @relation(fields: [exchangeId], references: [id])
+}
+
+model Purchases {
+  id          Int      @id @default(autoincrement())
+  totalAmount Decimal
+  totalPaid   Decimal
+  dueDate     DateTime
+  note        String?
+  supplier_id Int
+  user_id     Int
+
+  Suppliers Suppliers @relation(fields: [supplier_id], references: [id])
+  Users     Users     @relation(fields: [user_id], references: [id])
+
+  PurchasesItems  PurchasesItems[]
+  PurchasesReturn PurchasesReturn[]
+}
+
+model PurchasesItems {
+  id          Int     @id @default(autoincrement())
+  quantity    Int
+  unitPrice   Decimal
+  purchase_id Int
+  product_id  Int
+
+  Purchases Purchases @relation(fields: [purchase_id], references: [id])
+  Products  Products  @relation(fields: [product_id], references: [id])
+}
+
+model PurchasesReturn {
+  id          Int     @id @default(autoincrement())
+  totalPaid   Decimal
+  note        String
+  purchase_id Int
+  user_id     Int
+  supplier_id Int
+
+  Purchases Purchases @relation(fields: [purchase_id], references: [id])
+  Users     Users     @relation(fields: [user_id], references: [id])
+  Suppliers Suppliers @relation(fields: [supplier_id], references: [id])
+
+  PurchasesReturnItems PurchasesReturnItems[]
+}
+
+model PurchasesReturnItems {
+  id                Int     @id @default(autoincrement())
+  quantity          Int
+  unitPrice         Decimal
+  products_id       Int
+  purchaseReturn_id Int
+
+  Products        Products        @relation(fields: [products_id], references: [id])
+  PurchasesReturn PurchasesReturn @relation(fields: [purchaseReturn_id], references: [id])
+}
+
+model Services {
+  id                 Int     @id @default(autoincrement())
+  serviceProductName String
+  serviceDescription String
+  serviceCost        Decimal
+  serviceStatus      String
+  customer_id        Int?
+  user_id            Int?
+
+  Customers Customers? @relation(fields: [customer_id], references: [id])
+  Users     Users?     @relation(fields: [user_id], references: [id])
+}

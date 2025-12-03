@@ -1,0 +1,10 @@
+[
+  {
+    "customer_id": 1,
+    "user_id": 2,
+    "serviceProductName": "Laptop Repair",
+    "serviceDescription": "Screen replacement",
+    "serviceCost": 5000,
+    "serviceStatus": "Completed"
+  }
+]

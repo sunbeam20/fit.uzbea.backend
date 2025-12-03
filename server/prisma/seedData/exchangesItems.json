@@ -1,0 +1,10 @@
+[
+  {
+    "quantity": 1,
+    "unitPrice": 0,
+    "note": "Exchanged mouse -> keyboard",
+    "oldProduct_id": 2,
+    "newProduct_id": 3,
+    "exchangeId": 1
+  }
+]

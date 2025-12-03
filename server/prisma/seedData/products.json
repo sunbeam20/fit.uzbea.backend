@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Laptop",
+    "specification": "Core i7, 16GB, 512GB SSD",
+    "description": "High performance laptop",
+    "quantity": 50,
+    "purchasePrice": 80000,
+    "wholesalePrice": 85000,
+    "retailPrice": 90000,
+    "serial": "LAP-001",
+    "warranty": "Yes",
+    "category_id": 1
+  },
+  {
+    "name": "Mouse",
+    "specification": "Wireless Optical",
+    "description": "Ergonomic wireless mouse",
+    "quantity": 200,
+    "purchasePrice": 500,
+    "wholesalePrice": 600,
+    "retailPrice": 700,
+    "serial": "MOU-001",
+    "warranty": "No",
+    "category_id": 2
+  },
+  {
+    "name": "Keyboard",
+    "specification": "Mechanical, RGB",
+    "description": "60% mechanical keyboard",
+    "quantity": 80,
+    "purchasePrice": 1500,
+    "wholesalePrice": 1700,
+    "retailPrice": 2000,
+    "serial": "KEY-001",
+    "warranty": "No",
+    "category_id": 2
+  }
+]

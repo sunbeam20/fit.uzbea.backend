@@ -1,0 +1,14 @@
+[
+  {
+    "quantity": 1,
+    "unitPrice": 90000,
+    "sales_id": 1,
+    "product_id": 1
+  },
+  {
+    "quantity": 1,
+    "unitPrice": 500,
+    "sales_id": 1,
+    "product_id": 2
+  }
+]
