@@ -1,12 +1,9 @@
-{
+echo '{
   "version": 2,
   "builds": [
     {
-      "src": "src/index.ts",  // Changed: Use TypeScript directly
-      "use": "@vercel/node",
-      "config": {
-        "maxLambdaSize": "10mb"
-      }
+      "src": "src/index.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
@@ -14,8 +11,5 @@
       "src": "/(.*)",
       "dest": "/src/index.ts"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
-}
+  ]
+}'
