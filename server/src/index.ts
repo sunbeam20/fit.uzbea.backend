@@ -54,7 +54,8 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Fit Uzbea Backend API',
     version: '1.0.0',
-    status: 'running'
+    status: 'running',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -63,15 +64,24 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    service: 'Fit Uzbea Backend'
+    service: 'Fit Uzbea Backend',
+    uptime: process.uptime()
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
+// 404 handler - FIXED: Use a function instead of '*'
+app.use((req, res, next) => {
   res.status(404).json({ 
     error: 'Route not found',
-    path: req.originalUrl
+    path: req.originalUrl,
+    method: req.method,
+    availableRoutes: [
+      'GET /',
+      'GET /api/health',
+      'POST /api/auth/login',
+      'GET /api/dashboard',
+      'GET /api/product'
+    ]
   });
 });
 
@@ -79,7 +89,8 @@ app.use('*', (req, res) => {
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err.message);
   res.status(500).json({ 
-    error: 'Internal server error'
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
 });
 
@@ -90,6 +101,6 @@ export default app;
 if (require.main === module) {
   const port = process.env.PORT || 3001;
   app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    console.log(`🚀 Server running on http://localhost:${port}`);
   });
 }
