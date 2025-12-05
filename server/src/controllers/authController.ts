@@ -111,7 +111,7 @@ export const login = async (req: Request, res: Response) => {
     const user = await prisma.users.findFirst({
       where: { 
         email,
-        status: 'Active'
+        status: 'Active'  as any
       },
       include: {
         Roles: true
