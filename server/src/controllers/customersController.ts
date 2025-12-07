@@ -321,35 +321,38 @@ export const deleteCustomer = async (req: Request<{ id: string }>, res: Response
   }
 };
 
-// Search customers - FIXED VERSION
+// Search customers
 export const searchCustomers = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { query } = req.query;
+    const { q } = req.query;  // Changed from 'query' to 'q'
+    
+    console.log("Customer search query:", q);
 
-    if (!query || typeof query !== 'string') {
-      res.status(400).json({ error: 'Search query is required' });
+    if (!q || typeof q !== 'string') {
+      console.log("Empty query, returning empty array");
+      res.json([]);
       return;
     }
 
-    // Use the correct Prisma query mode
     const customers = await prisma.customers.findMany({
       where: {
         OR: [
           {
             name: {
-              contains: query,
-              mode: 'insensitive' as const, // Use const assertion
+              contains: q,
+              mode: 'insensitive' as const,
             },
           },
           {
             email: {
-              contains: query,
-              mode: 'insensitive' as const, // Use const assertion
+              contains: q,
+              mode: 'insensitive' as const,
             },
           },
           {
             phone: {
-              contains: query,
+              contains: q,
+              mode: 'insensitive' as const,
             },
           },
         ],
@@ -365,13 +368,17 @@ export const searchCustomers = async (req: Request, res: Response): Promise<void
       orderBy: {
         name: 'asc',
       },
-      take: 50, // Limit results
+      take: 10, // Reduced from 50 to 10 for better performance
     });
 
+    console.log(`Found ${customers.length} customers for search: "${q}"`);
     res.json(customers);
   } catch (error) {
     console.error('Error searching customers:', error);
-    res.status(500).json({ error: 'Failed to search customers' });
+    res.status(500).json({ 
+      error: 'Failed to search customers',
+      details: error instanceof Error ? error.message : String(error)
+    });
   }
 };
 

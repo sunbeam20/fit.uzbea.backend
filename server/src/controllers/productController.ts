@@ -97,3 +97,114 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
         res.status(500).json({message: "Error deleting product"});
     }
 };
+
+// SEARCH products for POS - FIXED VERSION
+export const searchProducts = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { q } = req.query;
+        
+        console.log("Search query received:", q);
+        
+        if (!q || typeof q !== 'string') {
+            res.json([]);
+            return;
+        }
+
+        // Option 1: Use Prisma's findMany (Recommended - safer)
+        const products = await prisma.products.findMany({
+            where: {
+                OR: [
+                    {
+                        name: {
+                            contains: q,
+                            mode: 'insensitive' as const,
+                        },
+                    },
+                    {
+                        serial: {
+                            contains: q,
+                            mode: 'insensitive' as const,
+                        },
+                    },
+                    {
+                        specification: {
+                            contains: q,
+                            mode: 'insensitive' as const,
+                        },
+                    },
+                ],
+            },
+            include: {
+                Categories: true,
+            },
+            orderBy: {
+                name: 'asc',
+            },
+            take: 20,
+        });
+        
+        console.log(`Found ${products.length} products`);
+        res.json(products);
+        
+    } catch (error) {
+        console.error("Error searching products:", error);
+        // Send detailed error for debugging
+        res.status(500).json({
+            message: "Error searching products",
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+        });
+    }
+};
+
+// GET products for POS (frequently sold/recent) - FIXED
+export const getProductsPOS = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const products = await prisma.products.findMany({
+            include: {
+                Categories: true,
+            },
+            orderBy: {
+                id: 'desc', // Use id since you don't have updatedAt
+            },
+            take: 30,
+        });
+        
+        res.json(products);
+    } catch (error) {
+        console.error("Error fetching POS products:", error);
+        res.status(500).json({message: "Error retrieving POS products"});
+    }
+};
+
+// GET product by barcode - FIXED
+export const getProductByBarcode = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { barcode } = req.params;
+        console.log("Barcode search for:", barcode);
+        
+        const product = await prisma.products.findFirst({
+            where: {
+                serial: {
+                    equals: barcode,
+                    mode: 'insensitive' as const,
+                },
+            },
+            include: {
+                Categories: true,
+            },
+        });
+        
+        if (!product) {
+            console.log("Product not found for barcode:", barcode);
+            res.status(404).json({message: "Product not found"});
+            return;
+        }
+        
+        console.log("Found product:", product.name);
+        res.json(product);
+    } catch (error) {
+        console.error("Error fetching product by barcode:", error);
+        res.status(500).json({message: "Error retrieving product"});
+    }
+};
