@@ -208,3 +208,184 @@ export const getProductByBarcode = async (req: Request, res: Response): Promise<
         res.status(500).json({message: "Error retrieving product"});
     }
 };
+
+// GET product sales history
+export const getProductSales = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        
+        const sales = await prisma.salesItems.findMany({
+            where: {
+                product_id: parseInt(id),
+            },
+            include: {
+                Sales: {
+                    include: {
+                        Customers: true,
+                    }
+                },
+                Products: true,
+            },
+            orderBy: {
+                Sales: {
+                    id: 'desc',
+                }
+            },
+        });
+        
+        // Transform the data for frontend
+        const formattedSales = sales.map(item => ({
+            id: item.id,
+            date: item.Sales?.dueDate || new Date(),
+            quantity: item.quantity,
+            price: item.unitPrice,
+            total: item.quantity * parseFloat(item.unitPrice.toString()),
+            customer: item.Sales?.Customers?.name,
+            invoiceNumber: `SALE-${item.Sales?.id}`,
+            status: 'completed',
+        }));
+        
+        res.json(formattedSales);
+    } catch (error) {
+        console.error("Error fetching product sales:", error);
+        res.status(500).json({message: "Error retrieving product sales"});
+    }
+};
+
+// GET product purchase history
+export const getProductPurchases = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        
+        const purchases = await prisma.purchasesItems.findMany({
+            where: {
+                product_id: parseInt(id),
+            },
+            include: {
+                Purchases: {
+                    include: {
+                        Suppliers: true,
+                    }
+                },
+                Products: true,
+            },
+            orderBy: {
+                Purchases: {
+                    id: 'desc',
+                }
+            },
+        });
+        
+        // Transform the data for frontend
+        const formattedPurchases = purchases.map(item => ({
+            id: item.id,
+            date: item.Purchases?.dueDate || new Date(),
+            quantity: item.quantity,
+            price: item.unitPrice,
+            total: item.quantity * parseFloat(item.unitPrice.toString()),
+            supplier: item.Purchases?.Suppliers?.name,
+            invoiceNumber: `PUR-${item.Purchases?.id}`,
+            status: 'completed',
+        }));
+        
+        res.json(formattedPurchases);
+    } catch (error) {
+        console.error("Error fetching product purchases:", error);
+        res.status(500).json({message: "Error retrieving product purchases"});
+    }
+};
+
+// GET product sales returns history
+export const getProductSalesReturns = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        
+        const salesReturns = await prisma.salesReturnItems.findMany({
+            where: {
+                product_id: parseInt(id),
+            },
+            include: {
+                SalesReturn: {
+                    include: {
+                        Customers: true,
+                    }
+                },
+                Products: true,
+            },
+            orderBy: {
+                SalesReturn: {
+                    id: 'desc',
+                }
+            },
+        });
+        
+        // Transform the data for frontend
+        const formattedReturns = salesReturns.map(item => ({
+            id: item.id,
+            date: new Date(), // You might want to add a date field to SalesReturn model
+            quantity: item.quantity,
+            price: item.unitPrice,
+            total: item.quantity * parseFloat(item.unitPrice.toString()),
+            customer: item.SalesReturn?.Customers?.name,
+            invoiceNumber: `RET-${item.SalesReturn?.id}`,
+            status: 'completed',
+        }));
+        
+        res.json(formattedReturns);
+    } catch (error) {
+        console.error("Error fetching product sales returns:", error);
+        res.status(500).json({message: "Error retrieving product sales returns"});
+    }
+};
+
+// GET product exchanges history
+export const getProductExchanges = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        
+        // Query for exchanges where product is either old or new product
+        const exchanges = await prisma.exchangesItems.findMany({
+            where: {
+                OR: [
+                    { oldProduct_id: parseInt(id) },
+                    { newProduct_id: parseInt(id) },
+                ],
+            },
+            include: {
+                Exchanges: {
+                    include: {
+                        Customers: true,
+                    }
+                },
+                oldProduct: true,
+                newProduct: true,
+            },
+            orderBy: {
+                Exchanges: {
+                    id: 'desc',
+                }
+            },
+        });
+        
+        // Transform the data for frontend
+        const formattedExchanges = exchanges.map(item => ({
+            id: item.id,
+            date: new Date(), // You might want to add a date field to Exchanges model
+            quantity: item.quantity,
+            price: parseFloat(item.unitPrice.toString()),
+            total: item.quantity * parseFloat(item.unitPrice.toString()),
+            customer: item.Exchanges?.Customers?.name,
+            invoiceNumber: `EXC-${item.Exchanges?.id}`,
+            status: 'completed',
+            // Additional info for display
+            isOldProduct: item.oldProduct_id === parseInt(id),
+            oldProductName: item.oldProduct?.name,
+            newProductName: item.newProduct?.name,
+        }));
+        
+        res.json(formattedExchanges);
+    } catch (error) {
+        console.error("Error fetching product exchanges:", error);
+        res.status(500).json({message: "Error retrieving product exchanges"});
+    }
+};
