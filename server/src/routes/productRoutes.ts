@@ -7,11 +7,13 @@ import {
   deleteProduct,
   searchProducts,
   getProductsPOS,
-  getProductByBarcode,
+  // getProductByBarcode,
   getProductSales,
   getProductPurchases,
   getProductSalesReturns,
   getProductExchanges,
+  getProductSerials,
+  updateSerialStatus,
 } from "../controllers/productController";
 
 const router = express.Router();
@@ -19,11 +21,13 @@ const router = express.Router();
 router.get("/", getProducts);
 router.get("/search", searchProducts);
 router.get("/pos", getProductsPOS);
-router.get("/barcode/:barcode", getProductByBarcode);
+// router.get("/barcode/:barcode", getProductByBarcode);
 router.get("/:id", getProductById);
 router.post("/", createProduct);
 router.put("/:id", updateProduct);
 router.delete("/:id", deleteProduct);
+router.get("/:productId/serials", getProductSerials);
+router.patch("/serials/:serialId/status", updateSerialStatus);
 
 router.get("/:id/sales", getProductSales);
 router.get("/:id/purchases", getProductPurchases);
