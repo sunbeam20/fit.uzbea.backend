@@ -54,7 +54,7 @@ export const getProductById = async (
   }
 };
 
-// POST create new product with serial number support - UPDATED
+// POST create new product with serial number support - FIXED
 export const createProduct = async (
   req: Request,
   res: Response
@@ -73,7 +73,7 @@ export const createProduct = async (
       category_id,
       useIndividualSerials,
       bulkSerial,
-      individualSerials,
+      individualSerials, // Array of objects with serial and warranty: [{serial: "ABC123", warranty: "Yes"}, ...]
       userId,
     } = req.body;
 
@@ -93,24 +93,31 @@ export const createProduct = async (
         return;
       }
 
-      // Check for duplicate serials
-      const duplicateSerials = await prisma.productSerials.findMany({
-        where: {
-          serial: {
-            in: individualSerials,
-          },
-        },
-      });
+      // Extract serial numbers from objects
+      const serialNumbers = individualSerials
+        .map((s: any) => s.serial) // Extract serial string from each object
+        .filter((s: string) => s && s.trim() !== ""); // Filter out empty/null serials
 
-      if (duplicateSerials.length > 0) {
-        const duplicates = duplicateSerials.map(
-          (s: { serial: any }) => s.serial
-        );
-        res.status(400).json({
-          message: "Duplicate serial numbers found",
-          duplicates,
+      // Check for duplicate serials only if we have serial numbers
+      if (serialNumbers.length > 0) {
+        const duplicateSerials = await prisma.productSerials.findMany({
+          where: {
+            serial: {
+              in: serialNumbers, // Now passing array of strings, not objects
+            },
+          },
         });
-        return;
+
+        if (duplicateSerials.length > 0) {
+          const duplicates = duplicateSerials.map(
+            (s: { serial: any }) => s.serial
+          );
+          res.status(400).json({
+            message: "Duplicate serial numbers found",
+            duplicates,
+          });
+          return;
+        }
       }
     }
 
@@ -134,11 +141,11 @@ export const createProduct = async (
 
     // Create individual serial numbers if enabled
     if (useIndividualSerials && individualSerials) {
-      const serialsData = individualSerials.map((serial: any) => ({
-        serial,
+      const serialsData = individualSerials.map((item: any) => ({
+        serial: item.serial || null, // Extract serial from object
         product_id: product.id,
         status: "Available" as const,
-        warranty: warranty === "Yes" ? "Yes" : "No", // Use product warranty or default to No
+        warranty: item.warranty || warranty || "No", // Use item warranty or fallback
       }));
 
       await prisma.productSerials.createMany({
@@ -171,7 +178,6 @@ export const reserveSerialsForSale = async (
   serials?: string[];
   error?: string;
 }> => {
-  // Remove "serals: boolean;" - it's a typo
   try {
     // Find available serials
     const availableSerials = await prisma.productSerials.findMany({
@@ -323,7 +329,7 @@ export const updateSerialStatus = async (
   }
 };
 
-// PUT update product
+// PUT update product - FIXED
 export const updateProduct = async (
   req: Request,
   res: Response
@@ -342,7 +348,7 @@ export const updateProduct = async (
       productType,
       category_id,
       useIndividualSerials,
-      individualSerials, // Array of objects with serial and warranty
+      individualSerials, // Array of objects with serial and warranty: [{serial: "ABC123", warranty: "Yes"}, ...]
       supplier_id,
       userId,
     } = req.body;
@@ -442,7 +448,7 @@ export const updateProduct = async (
             const existingSerials = await tx.productSerials.findMany({
               where: {
                 serial: {
-                  in: serialNumbers,
+                  in: serialNumbers, // Fixed: now array of strings
                 },
                 product_id: {
                   not: parseInt(id),
@@ -526,7 +532,7 @@ export const deleteProduct = async (
   }
 };
 
-// SEARCH products for POS - FIXED VERSION
+// SEARCH products for POS
 export const searchProducts = async (
   req: Request,
   res: Response
@@ -541,7 +547,6 @@ export const searchProducts = async (
       return;
     }
 
-    // Option 1: Use Prisma's findMany (Recommended - safer)
     const products = await prisma.products.findMany({
       where: {
         OR: [
@@ -573,7 +578,6 @@ export const searchProducts = async (
     res.json(products);
   } catch (error) {
     console.error("Error searching products:", error);
-    // Send detailed error for debugging
     res.status(500).json({
       message: "Error searching products",
       error: error instanceof Error ? error.message : String(error),
@@ -582,7 +586,7 @@ export const searchProducts = async (
   }
 };
 
-// GET products for POS (frequently sold/recent) - FIXED
+// GET products for POS (frequently sold/recent)
 export const getProductsPOS = async (
   req: Request,
   res: Response
@@ -594,7 +598,7 @@ export const getProductsPOS = async (
         productSerials: true,
       },
       orderBy: {
-        id: "desc", // Use id since you don't have updatedAt
+        id: "desc",
       },
       take: 30,
     });
@@ -605,35 +609,6 @@ export const getProductsPOS = async (
     res.status(500).json({ message: "Error retrieving POS products" });
   }
 };
-
-// GET product by barcode - FIXED
-// export const getProductByBarcode = async (req: Request, res: Response): Promise<void> => {
-//     try {
-//         const { barcode } = req.params;
-//         console.log("Barcode search for:", barcode);
-
-//         const product = await prisma.products.findFirst({
-//             where: {
-//                 barcode: barcode,
-//             },
-//             include: {
-//                 Categories: true,
-//             },
-//         });
-
-//         if (!product) {
-//             console.log("Product not found for barcode:", barcode);
-//             res.status(404).json({message: "Product not found"});
-//             return;
-//         }
-
-//         console.log("Found product:", product.name);
-//         res.json(product);
-//     } catch (error) {
-//         console.error("Error fetching product by barcode:", error);
-//         res.status(500).json({message: "Error retrieving product"});
-//     }
-// };
 
 // GET product sales history
 export const getProductSales = async (
@@ -757,7 +732,7 @@ export const getProductSalesReturns = async (
     // Transform the data for frontend
     const formattedReturns = salesReturns.map((item) => ({
       id: item.id,
-      date: new Date(), // You might want to add a date field to SalesReturn model
+      date: new Date(),
       quantity: item.quantity,
       price: item.unitPrice,
       total: item.quantity * parseFloat(item.unitPrice.toString()),
@@ -805,7 +780,7 @@ export const getProductExchanges = async (
     // Transform the data for frontend
     const formattedExchanges = exchanges.map((item) => ({
       id: item.id,
-      date: new Date(), // You might want to add a date field to Exchanges model
+      date: new Date(),
       quantity: item.quantity,
       price: parseFloat(item.unitPrice.toString()),
       total: item.quantity * parseFloat(item.unitPrice.toString()),
