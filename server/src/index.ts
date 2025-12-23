@@ -16,6 +16,7 @@ import customerRoutes from "./routes/customerRoutes";
 import purchaseRoutes from "./routes/purchaseRoutes";
 import authRoutes from "./routes/authRoutes";
 import posRoutes from "./routes/posRoutes";
+import supplierRoutes from "./routes/supplierRoutes";
 
 // CONFIGURATIONS
 dotenv.config();
@@ -41,6 +42,7 @@ app.use("/api/customer", customerRoutes);
 app.use("/api/purchase", purchaseRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/pos", posRoutes);
+app.use("/api/supplier", supplierRoutes); // Supplier Routes
 
 // SERVER
 const port = process.env.PORT || 3001;
