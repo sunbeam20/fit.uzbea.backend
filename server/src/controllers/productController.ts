@@ -71,6 +71,7 @@ export const createProduct = async (
       warranty, // Product-level warranty if needed
       productType,
       category_id,
+      supplier_id,
       useIndividualSerials,
       bulkSerial,
       individualSerials, // Array of objects with serial and warranty: [{serial: "ABC123", warranty: "Yes"}, ...]
@@ -133,6 +134,7 @@ export const createProduct = async (
         retailPrice: parseFloat(retailPrice),
         productType: productType || "New",
         category_id,
+        supplier_id,
         useIndividualSerials,
         created_by: userId || null,
         status: "Active",
