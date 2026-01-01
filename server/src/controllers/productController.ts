@@ -641,7 +641,6 @@ export const getProductsPOS = async (
   }
 };
 
-<<<<<<< HEAD
 // Scan barcode
 // export const scanBarcode = async (req: Request, res: Response) => {
 //   try {
@@ -677,8 +676,6 @@ export const getProductsPOS = async (
 //   }
 // };
 
-=======
->>>>>>> f224fbaaa5da1ae7e0bfeb5a8bf5be4f39066677
 // GET product sales history
 export const getProductSales = async (
   req: Request,
