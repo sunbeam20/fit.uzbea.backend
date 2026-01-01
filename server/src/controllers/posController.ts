@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "../../generated/prisma";
+import { generateId } from "../utils/idGenerator";
 
 const prisma = new PrismaClient();
 
@@ -21,8 +22,11 @@ export const createSaleFromPOS = async (req: Request, res: Response): Promise<vo
             // 1. Create the sale
             const sale = await prisma.sales.create({
                 data: {
+                    saleNo: await generateId('sales', 'SALE'),
                     totalAmount: parseFloat(totalAmount.toString()),
                     totalPaid: parseFloat(totalPaid?.toString() || "0"),
+                    totaldiscount: parseFloat(discount.toString()),
+                    status: (parseFloat(totalPaid?.toString() || "0") >= parseFloat(totalAmount.toString())) ? 'Completed' : 'Pending',
                     dueDate: new Date(),
                     customer_id: customer_id || null,
                     user_id: user_id || 1, // Fallback to admin user

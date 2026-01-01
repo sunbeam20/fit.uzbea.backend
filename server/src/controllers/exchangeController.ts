@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
+import { generateId } from '../utils/idGenerator';
 
 const prisma = new PrismaClient();
 
@@ -156,6 +157,7 @@ export const createExchange = async (req: Request, res: Response) => {
     // Create exchange
     const newExchange = await prisma.exchanges.create({
       data: {
+        exchangeNo: await generateId('exchanges', 'EXC'),
         sales_id: parseInt(sales_id),
         user_id: parseInt(user_id),
         customer_id: parseInt(customer_id),

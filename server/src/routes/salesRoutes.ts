@@ -7,11 +7,13 @@ import {
   deleteSale,
   getSalesStats,
   getSalesByDateRange,
+  searchSales,
 } from '../controllers/salesController';
 
 const router = express.Router();
 
 router.get('/', getAllSales);
+router.get('/search', searchSales);
 router.get('/stats', getSalesStats);
 router.get('/date-range', getSalesByDateRange);
 router.get('/:id', getSaleById);

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "../../generated/prisma";
+import { generateId } from "../utils/idGenerator";
 
 const prisma = new PrismaClient();
 
@@ -51,6 +52,7 @@ export const createSupplier = async (req: Request, res: Response): Promise<void>
         
         const newSupplier = await prisma.suppliers.create({
             data: { 
+                suppId: await generateId('suppliers', 'SUP'),
                 name,
                 email: email || null,
                 phone,

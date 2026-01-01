@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from "../../generated/prisma";
+import { generateId } from '../utils/idGenerator';
 
 const prisma = new PrismaClient();
 
@@ -181,6 +182,7 @@ export const createCustomer = async (req: Request<{}, {}, CreateCustomerBody>, r
 
     const customer = await prisma.customers.create({
       data: {
+        custId: await generateId('customers', 'CUST'),
         name,
         email: email || null,
         phone,
@@ -324,11 +326,11 @@ export const deleteCustomer = async (req: Request<{ id: string }>, res: Response
 // Search customers
 export const searchCustomers = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { q } = req.query;  // Changed from 'query' to 'q'
+    const { query } = req.query;  
     
-    console.log("Customer search query:", q);
+    console.log("Customer search query:", query);
 
-    if (!q || typeof q !== 'string') {
+    if (!query || typeof query !== 'string') {
       console.log("Empty query, returning empty array");
       res.json([]);
       return;
@@ -339,19 +341,19 @@ export const searchCustomers = async (req: Request, res: Response): Promise<void
         OR: [
           {
             name: {
-              contains: q,
+              contains: query,
               mode: 'insensitive' as const,
             },
           },
           {
             email: {
-              contains: q,
+              contains: query,
               mode: 'insensitive' as const,
             },
           },
           {
             phone: {
-              contains: q,
+              contains: query,
               mode: 'insensitive' as const,
             },
           },
@@ -371,7 +373,7 @@ export const searchCustomers = async (req: Request, res: Response): Promise<void
       take: 10, // Reduced from 50 to 10 for better performance
     });
 
-    console.log(`Found ${customers.length} customers for search: "${q}"`);
+    console.log(`Found ${customers.length} customers for search: "${query}"`);
     res.json(customers);
   } catch (error) {
     console.error('Error searching customers:', error);

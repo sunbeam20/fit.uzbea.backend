@@ -7,6 +7,7 @@ import {
   deleteProduct,
   searchProducts,
   getProductsPOS,
+  // scanBarcode,
   // getProductByBarcode,
   getProductSales,
   getProductPurchases,
@@ -21,6 +22,7 @@ const router = express.Router();
 router.get("/", getProducts);
 router.get("/search", searchProducts);
 router.get("/pos", getProductsPOS);
+// router.get('/barcode/:barcode', scanBarcode);
 // router.get("/barcode/:barcode", getProductByBarcode);
 router.get("/:id", getProductById);
 router.post("/", createProduct);

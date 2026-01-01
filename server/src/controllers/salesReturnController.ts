@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from "../../generated/prisma";
+import { generateId } from '../utils/idGenerator';
 
 const prisma = new PrismaClient();
 
@@ -132,6 +133,7 @@ export const createSalesReturn = async (req: Request, res: Response) => {
     // Create sales return
     const newSalesReturn = await prisma.salesReturn.create({
       data: {
+        returnNo: await generateId('salesReturn', 'SRN'),
         sales_id: parseInt(sales_id),
         user_id: parseInt(user_id),
         customer_id: parseInt(customer_id),

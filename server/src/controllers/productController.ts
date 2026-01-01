@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "../../generated/prisma";
+import { generateId } from "../utils/idGenerator";
 
 const prisma = new PrismaClient();
 
@@ -54,7 +55,7 @@ export const getProductById = async (
   }
 };
 
-// POST create new product with serial number support - UPDATED
+// POST create new product with serial number support - FIXED
 export const createProduct = async (
   req: Request,
   res: Response
@@ -71,9 +72,10 @@ export const createProduct = async (
       warranty, // Product-level warranty if needed
       productType,
       category_id,
+      supplier_id,
       useIndividualSerials,
       bulkSerial,
-      individualSerials,
+      individualSerials, // Array of objects with serial and warranty: [{serial: "ABC123", warranty: "Yes"}, ...]
       userId,
     } = req.body;
 
@@ -93,30 +95,38 @@ export const createProduct = async (
         return;
       }
 
-      // Check for duplicate serials
-      const duplicateSerials = await prisma.productSerials.findMany({
-        where: {
-          serial: {
-            in: individualSerials,
-          },
-        },
-      });
+      // Extract serial numbers from objects
+      const serialNumbers = individualSerials
+        .map((s: any) => s.serial) // Extract serial string from each object
+        .filter((s: string) => s && s.trim() !== ""); // Filter out empty/null serials
 
-      if (duplicateSerials.length > 0) {
-        const duplicates = duplicateSerials.map(
-          (s: { serial: any }) => s.serial
-        );
-        res.status(400).json({
-          message: "Duplicate serial numbers found",
-          duplicates,
+      // Check for duplicate serials only if we have serial numbers
+      if (serialNumbers.length > 0) {
+        const duplicateSerials = await prisma.productSerials.findMany({
+          where: {
+            serial: {
+              in: serialNumbers, // Now passing array of strings, not objects
+            },
+          },
         });
-        return;
+
+        if (duplicateSerials.length > 0) {
+          const duplicates = duplicateSerials.map(
+            (s: { serial: any }) => s.serial
+          );
+          res.status(400).json({
+            message: "Duplicate serial numbers found",
+            duplicates,
+          });
+          return;
+        }
       }
     }
 
     // Create the product
     const product = await prisma.products.create({
       data: {
+        productCode: await generateId('products', 'PRD'),
         name,
         specification,
         description,
@@ -126,6 +136,7 @@ export const createProduct = async (
         retailPrice: parseFloat(retailPrice),
         productType: productType || "New",
         category_id,
+        supplier_id,
         useIndividualSerials,
         created_by: userId || null,
         status: "Active",
@@ -134,11 +145,11 @@ export const createProduct = async (
 
     // Create individual serial numbers if enabled
     if (useIndividualSerials && individualSerials) {
-      const serialsData = individualSerials.map((serial: any) => ({
-        serial,
+      const serialsData = individualSerials.map((item: any) => ({
+        serial: item.serial || null, // Extract serial from object
         product_id: product.id,
         status: "Available" as const,
-        warranty: warranty === "Yes" ? "Yes" : "No", // Use product warranty or default to No
+        warranty: item.warranty || warranty || "No", // Use item warranty or fallback
       }));
 
       await prisma.productSerials.createMany({
@@ -168,10 +179,9 @@ export const reserveSerialsForSale = async (
   quantity: number
 ): Promise<{
   success: boolean;
-  serials?: string[];
+  serials?: { id: number; serial: string }[];
   error?: string;
 }> => {
-  // Remove "serals: boolean;" - it's a typo
   try {
     // Find available serials
     const availableSerials = await prisma.productSerials.findMany({
@@ -180,6 +190,10 @@ export const reserveSerialsForSale = async (
         status: "Available",
       },
       take: quantity,
+      select: {
+        id: true,
+        serial: true,
+      }
     });
 
     if (availableSerials.length < quantity) {
@@ -189,24 +203,9 @@ export const reserveSerialsForSale = async (
       };
     }
 
-    const serialIds = availableSerials.map((s) => s.id);
-    const serialNumbers = availableSerials.map((s) => s.serial);
-
-    // Mark serials as reserved (or directly as sold)
-    await prisma.productSerials.updateMany({
-      where: {
-        id: {
-          in: serialIds,
-        },
-      },
-      data: {
-        status: "Sold",
-      },
-    });
-
     return {
       success: true,
-      serials: serialNumbers,
+      serials: availableSerials,
     };
   } catch (error) {
     console.error("Error reserving serials:", error);
@@ -224,7 +223,8 @@ export const createSaleWithSerials = async (
     quantity: number;
     unitPrice: number;
   }>,
-  saleId: number
+  saleId: number,
+  salesItemId: number // Add this parameter
 ): Promise<void> => {
   for (const item of items) {
     const product = await prisma.products.findUnique({
@@ -241,16 +241,26 @@ export const createSaleWithSerials = async (
       );
 
       if (result.success && result.serials) {
-        // Update serials with sale_id
+        // Create SalesItemSerials records (junction table)
+        const salesItemSerialsData = result.serials.map(serial => ({
+          salesItem_id: salesItemId,
+          serial_id: serial.id,
+        }));
+
+        await prisma.salesItemSerials.createMany({
+          data: salesItemSerialsData,
+        });
+
+        // Update ProductSerials status to "Sold"
+        const serialIds = result.serials.map(s => s.id);
         await prisma.productSerials.updateMany({
           where: {
-            serial: {
-              in: result.serials,
+            id: {
+              in: serialIds,
             },
-            product_id: item.product_id,
           },
           data: {
-            sale_id: saleId,
+            status: "Sold",
           },
         });
       } else {
@@ -261,7 +271,6 @@ export const createSaleWithSerials = async (
     }
   }
 };
-
 // GET product serials
 export const getProductSerials = async (
   req: Request,
@@ -285,15 +294,38 @@ export const getProductSerials = async (
         createdAt: "desc",
       },
       include: {
-        Sales: {
+        // Include the junction table to get sales info
+        SalesItemSerials: {
           include: {
-            Customers: true,
+            SalesItems: {
+              include: {
+                Sales: {
+                  include: {
+                    Customers: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
     });
 
-    res.json(serials);
+    // Transform the data for easier frontend consumption
+    const transformedSerials = serials.map(serial => {
+      const saleInfo = serial.SalesItemSerials[0]?.SalesItems?.Sales;
+      
+      return {
+        ...serial,
+        saleInfo: saleInfo ? {
+          saleNo: saleInfo.saleNo,
+          customerName: saleInfo.Customers?.name,
+          saleDate: saleInfo.createdAt,
+        } : null,
+      };
+    });
+
+    res.json(transformedSerials);
   } catch (error) {
     console.error("Error fetching product serials:", error);
     res.status(500).json({ message: "Error retrieving product serials" });
@@ -323,7 +355,7 @@ export const updateSerialStatus = async (
   }
 };
 
-// PUT update product
+// PUT update product - FIXED
 export const updateProduct = async (
   req: Request,
   res: Response
@@ -342,7 +374,7 @@ export const updateProduct = async (
       productType,
       category_id,
       useIndividualSerials,
-      individualSerials, // Array of objects with serial and warranty
+      individualSerials, // Array of objects with serial and warranty: [{serial: "ABC123", warranty: "Yes"}, ...]
       supplier_id,
       userId,
     } = req.body;
@@ -442,7 +474,7 @@ export const updateProduct = async (
             const existingSerials = await tx.productSerials.findMany({
               where: {
                 serial: {
-                  in: serialNumbers,
+                  in: serialNumbers, // Fixed: now array of strings
                 },
                 product_id: {
                   not: parseInt(id),
@@ -526,34 +558,33 @@ export const deleteProduct = async (
   }
 };
 
-// SEARCH products for POS - FIXED VERSION
+// SEARCH products for POS
 export const searchProducts = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    const { q } = req.query;
+    const { query } = req.query;
 
-    console.log("Search query received:", q);
+    console.log("Search query received:", query);
 
-    if (!q || typeof q !== "string") {
+    if (!query || typeof query !== "string") {
       res.json([]);
       return;
     }
 
-    // Option 1: Use Prisma's findMany (Recommended - safer)
     const products = await prisma.products.findMany({
       where: {
         OR: [
           {
             name: {
-              contains: q,
+              contains: query,
               mode: "insensitive" as const,
             },
           },
           {
             specification: {
-              contains: q,
+              contains: query,
               mode: "insensitive" as const,
             },
           },
@@ -573,7 +604,6 @@ export const searchProducts = async (
     res.json(products);
   } catch (error) {
     console.error("Error searching products:", error);
-    // Send detailed error for debugging
     res.status(500).json({
       message: "Error searching products",
       error: error instanceof Error ? error.message : String(error),
@@ -582,19 +612,24 @@ export const searchProducts = async (
   }
 };
 
-// GET products for POS (frequently sold/recent) - FIXED
+// GET products for POS (frequently sold/recent)
 export const getProductsPOS = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
     const products = await prisma.products.findMany({
+      where: {
+        quantity: {
+          gt: 0,
+        },
+      },
       include: {
         Categories: true,
         productSerials: true,
       },
       orderBy: {
-        id: "desc", // Use id since you don't have updatedAt
+        id: "desc",
       },
       take: 30,
     });
@@ -606,33 +641,39 @@ export const getProductsPOS = async (
   }
 };
 
-// GET product by barcode - FIXED
-// export const getProductByBarcode = async (req: Request, res: Response): Promise<void> => {
-//     try {
-//         const { barcode } = req.params;
-//         console.log("Barcode search for:", barcode);
+// Scan barcode
+// export const scanBarcode = async (req: Request, res: Response) => {
+//   try {
+//     const { barcode } = req.params;
 
-//         const product = await prisma.products.findFirst({
-//             where: {
-//                 barcode: barcode,
-//             },
-//             include: {
-//                 Categories: true,
-//             },
-//         });
+//     const product = await prisma.products.findFirst({
+//       where: {
+//         barcode: barcode
+//       },
+//       include: {
+//         Categories: true
+//       }
+//     });
 
-//         if (!product) {
-//             console.log("Product not found for barcode:", barcode);
-//             res.status(404).json({message: "Product not found"});
-//             return;
-//         }
-
-//         console.log("Found product:", product.name);
-//         res.json(product);
-//     } catch (error) {
-//         console.error("Error fetching product by barcode:", error);
-//         res.status(500).json({message: "Error retrieving product"});
+//     if (!product) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Product not found'
+//       });
 //     }
+
+//     res.status(200).json({
+//       success: true,
+//       data: product
+//     });
+//   } catch (error) {
+//     console.error('Scan barcode error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Failed to scan barcode',
+//       error: error instanceof Error ? error.message : 'Unknown error'
+//     });
+//   }
 // };
 
 // GET product sales history
@@ -757,7 +798,7 @@ export const getProductSalesReturns = async (
     // Transform the data for frontend
     const formattedReturns = salesReturns.map((item) => ({
       id: item.id,
-      date: new Date(), // You might want to add a date field to SalesReturn model
+      date: new Date(),
       quantity: item.quantity,
       price: item.unitPrice,
       total: item.quantity * parseFloat(item.unitPrice.toString()),
@@ -805,7 +846,7 @@ export const getProductExchanges = async (
     // Transform the data for frontend
     const formattedExchanges = exchanges.map((item) => ({
       id: item.id,
-      date: new Date(), // You might want to add a date field to Exchanges model
+      date: new Date(),
       quantity: item.quantity,
       price: parseFloat(item.unitPrice.toString()),
       total: item.quantity * parseFloat(item.unitPrice.toString()),

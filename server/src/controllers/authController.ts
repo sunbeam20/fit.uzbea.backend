@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "../../generated/prisma";
+import { generateId } from "../utils/idGenerator";
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -42,7 +43,7 @@ export const register = async (req: Request, res: Response) => {
 
     // Get default role
     const defaultRole = await prisma.roles.findFirst({
-      where: { name: 'user' }
+      where: { name: 'Sales' }
     });
 
     if (!defaultRole) {
@@ -57,6 +58,7 @@ export const register = async (req: Request, res: Response) => {
     // Create user
     const user = await prisma.users.create({
       data: {
+        userId: await generateId('users', 'USR'),
         name,
         email,
         password: hashedPassword,

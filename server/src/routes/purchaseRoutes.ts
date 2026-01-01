@@ -7,11 +7,13 @@ import {
   deletePurchase,
   getPurchasesBySupplier,
   getPurchaseStatistics,
+  searchPurchases,
 } from '../controllers/purchaseController';
 
 const router = Router();
 
 router.get('/', getAllPurchases);
+router.get('/search', searchPurchases);
 router.get('/statistics', getPurchaseStatistics);
 router.get('/supplier/:supplierId', getPurchasesBySupplier);
 router.get('/:id', getPurchaseById);

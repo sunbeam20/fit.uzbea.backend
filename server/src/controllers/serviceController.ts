@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
+import { generateId } from '../utils/idGenerator';
 
 const prisma = new PrismaClient();
 
@@ -111,6 +112,7 @@ export const createService = async (req: Request, res: Response) => {
     // Create service
     const newService = await prisma.services.create({
       data: {
+        serviceNo: await generateId('services', 'SRV'),
         serviceProductName,
         serviceDescription,
         serviceCost: parseFloat(serviceCost),
