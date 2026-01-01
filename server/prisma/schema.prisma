@@ -14,6 +14,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Roles model
 model Roles {
   id   Int    @id @default(autoincrement())
   name String @unique
@@ -21,6 +22,7 @@ model Roles {
   Users Users[]
 }
 
+// Session model
 model Session {
   id        Int      @id @default(autoincrement())
   userId    Int
@@ -31,9 +33,10 @@ model Session {
   @@map("sessions")
 }
 
-// Update your Users model to include timestamps and status
+// Users model with enum
 model Users {
   id        Int      @id @default(autoincrement())
+  userId    String   @unique
   name      String
   email     String   @unique
   password  String
@@ -51,8 +54,9 @@ model Users {
   Purchases       Purchases[]
   PurchasesReturn PurchasesReturn[]
   Services        Services[]
-  createdProducts Products[] @relation("ProductCreator")
-  updatedProducts Products[] @relation("ProductUpdater")
+  createdProducts Products[]        @relation("ProductCreator")
+  updatedProducts Products[]        @relation("ProductUpdater")
+  expenses        Expenses[]
 }
 
 enum Status {
@@ -60,8 +64,10 @@ enum Status {
   Inactive
 }
 
+// Customers model
 model Customers {
   id      Int     @id @default(autoincrement())
+  custId  String  @unique
   name    String
   email   String? @unique
   phone   String
@@ -73,8 +79,10 @@ model Customers {
   Services    Services[]
 }
 
+// Suppliers model
 model Suppliers {
   id      Int     @id @default(autoincrement())
+  suppId  String  @unique
   name    String
   email   String? @unique
   phone   String
@@ -85,6 +93,7 @@ model Suppliers {
   products        Products[]
 }
 
+// Categories model
 model Categories {
   id   Int    @id @default(autoincrement())
   name String @unique
@@ -92,8 +101,10 @@ model Categories {
   Products Products[]
 }
 
+// Products model and related models with enums
 model Products {
   id                   Int           @id @default(autoincrement())
+  productCode          String        @unique
   name                 String
   specification        String?
   description          String?
@@ -113,8 +124,8 @@ model Products {
 
   Categories Categories? @relation(fields: [category_id], references: [id])
   supplier   Suppliers?  @relation(fields: [supplier_id], references: [id])
-  creator    Users?      @relation("ProductCreator",fields: [created_by], references: [id])
-  updater    Users?      @relation("ProductUpdater",fields: [updated_by], references: [id])
+  creator    Users?      @relation("ProductCreator", fields: [created_by], references: [id])
+  updater    Users?      @relation("ProductUpdater", fields: [updated_by], references: [id])
 
   SalesItems           SalesItems[]
   SalesReturnItems     SalesReturnItems[]
@@ -145,16 +156,14 @@ model ProductSerials {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
-  // Track which sale this serial belongs to
-  sale_id Int?
-
-  Products Products? @relation(fields: [product_id], references: [id])
-  Sales    Sales?    @relation(fields: [sale_id], references: [id])
-
-  // Optional: Track return/exchange history
-  SalesReturnItems  SalesReturnItems[]
-  ExchangesItemsOld ExchangesItems[]   @relation("OldSerialExchangeItems")
-  ExchangesItemsNew ExchangesItems[]   @relation("NewSerialExchangeItems")
+  Products                  Products?                   @relation(fields: [product_id], references: [id])
+  SalesItemSerials          SalesItemSerials[]
+  salesReturnItemSerials    SalesReturnItemSerials[]
+  purchaseItemSerials       PurchaseItemSerials[]
+  purchaseReturnItemSerials PurchaseReturnItemSerials[]
+  salesReturnItems          SalesReturnItems[]
+  exchangeItemSerialsOld    ExchangeItemSerials[]       @relation("OldProductSerials")
+  exchangeItemSerialsNew    ExchangeItemSerials[]       @relation("NewProductSerials")
 }
 
 enum SerialStatus {
@@ -171,38 +180,68 @@ enum Warranty {
   No
 }
 
-model Sales {
+// Expenses model
+model Expenses {
   id          Int      @id @default(autoincrement())
-  totalAmount Decimal
-  totalPaid   Decimal
-  dueDate     DateTime
-  customer_id Int?
+  expenseNo   String   @unique
+  title       String
+  amount      Decimal
+  date        DateTime @default(now())
+  description String?
   user_id     Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now())
 
+  Users Users @relation(fields: [user_id], references: [id])
+}
+
+// Sales and related models
+model Sales {
+  id            Int       @id @default(autoincrement())
+  saleNo        String    @unique
+  totalAmount   Decimal
+  totalPaid     Decimal
+  totaldiscount Decimal?
+  dueDate       DateTime?
+  status        String
+  customer_id   Int?
+  user_id       Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
+
   Customers Customers? @relation(fields: [customer_id], references: [id])
   Users     Users?     @relation(fields: [user_id], references: [id])
 
-  SalesItems     SalesItems[]
-  SalesReturn    SalesReturn[]
-  Exchanges      Exchanges[]
-  productSerials ProductSerials[]
+  SalesItems  SalesItems[]
+  SalesReturn SalesReturn[]
+  Exchanges   Exchanges[]
 }
 
 model SalesItems {
   id         Int     @id @default(autoincrement())
   quantity   Int
   unitPrice  Decimal
+  discount   Decimal?
   sales_id   Int
   product_id Int
 
-  Sales    Sales?    @relation(fields: [sales_id], references: [id])
-  Products Products? @relation(fields: [product_id], references: [id])
+  Sales            Sales?             @relation(fields: [sales_id], references: [id])
+  Products         Products?          @relation(fields: [product_id], references: [id])
+  salesItemSerials SalesItemSerials[]
+}
+
+model SalesItemSerials {
+  id           Int @id @default(autoincrement())
+  salesItem_id Int
+  serial_id    Int
+
+  SalesItems     SalesItems     @relation(fields: [salesItem_id], references: [id])
+  ProductSerials ProductSerials @relation(fields: [serial_id], references: [id])
 }
 
 model SalesReturn {
   id            Int      @id @default(autoincrement())
+  returnNo      String   @unique
   total_payback Decimal
   note          String
   sales_id      Int
@@ -225,14 +264,26 @@ model SalesReturnItems {
   product_id     Int
   salesReturn_id Int
 
-  Products         Products?       @relation(fields: [product_id], references: [id])
-  SalesReturn      SalesReturn?    @relation(fields: [salesReturn_id], references: [id])
-  productSerials   ProductSerials? @relation(fields: [productSerialsId], references: [id])
-  productSerialsId Int?
+  Products               Products?                @relation(fields: [product_id], references: [id])
+  SalesReturn            SalesReturn?             @relation(fields: [salesReturn_id], references: [id])
+  productSerials         ProductSerials?          @relation(fields: [productSerialsId], references: [id])
+  productSerialsId       Int?
+  salesReturnItemSerials SalesReturnItemSerials[]
 }
 
+model SalesReturnItemSerials {
+  id                 Int @id @default(autoincrement())
+  salesReturnItem_id Int
+  serial_id          Int
+
+  SalesReturnItems SalesReturnItems @relation(fields: [salesReturnItem_id], references: [id])
+  ProductSerials   ProductSerials   @relation(fields: [serial_id], references: [id])
+}
+
+// Exchanges and related models
 model Exchanges {
   id           Int      @id @default(autoincrement())
+  exchangeNo   String   @unique
   totalPaid    Decimal
   totalPayback Decimal
   note         String
@@ -250,35 +301,38 @@ model Exchanges {
 }
 
 model ExchangesItems {
-  id        Int     @id @default(autoincrement())
-  quantity  Int
-  unitPrice Decimal
-  note      String
-
+  id            Int      @id @default(autoincrement())
+  quantity      Int
+  unitPrice     Decimal
+  note          String
   // Product references
   oldProduct_id Int
   newProduct_id Int
+  exchangeId    Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  // Serial references (ADD THESE)
-  oldSerial_id Int? // Reference to the old serial number
-  newSerial_id Int? // Reference to the new serial number
-
-  exchangeId Int?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  oldProduct Products?       @relation("OldProductExchangeItems", fields: [oldProduct_id], references: [id])
-  newProduct Products?       @relation("NewProductExchangeItems", fields: [newProduct_id], references: [id])
-  // Serial relations
-  oldSerial  ProductSerials? @relation("OldSerialExchangeItems", fields: [oldSerial_id], references: [id])
-  newSerial  ProductSerials? @relation("NewSerialExchangeItems", fields: [newSerial_id], references: [id])
-  Exchanges  Exchanges?      @relation(fields: [exchangeId], references: [id])
-
-  productSerialsId Int?
+  oldProduct          Products?             @relation("OldProductExchangeItems", fields: [oldProduct_id], references: [id])
+  newProduct          Products?             @relation("NewProductExchangeItems", fields: [newProduct_id], references: [id])
+  Exchanges           Exchanges?            @relation(fields: [exchangeId], references: [id])
+  exchangeItemSerials ExchangeItemSerials[]
 }
 
+model ExchangeItemSerials {
+  id              Int @id @default(autoincrement())
+  exchangeItem_id Int
+  serial_id_old   Int
+  serial_id_new   Int
+
+  ExchangesItems    ExchangesItems @relation(fields: [exchangeItem_id], references: [id])
+  OldProductSerials ProductSerials @relation("OldProductSerials", fields: [serial_id_old], references: [id])
+  NewProductSerials ProductSerials @relation("NewProductSerials", fields: [serial_id_new], references: [id])
+}
+
+// Purchases and related models
 model Purchases {
   id          Int      @id @default(autoincrement())
+  purchaseNo  String   @unique
   totalAmount Decimal
   totalPaid   Decimal
   dueDate     DateTime
@@ -302,12 +356,23 @@ model PurchasesItems {
   purchase_id Int
   product_id  Int
 
-  Purchases Purchases @relation(fields: [purchase_id], references: [id])
-  Products  Products  @relation(fields: [product_id], references: [id])
+  Purchases           Purchases             @relation(fields: [purchase_id], references: [id])
+  Products            Products              @relation(fields: [product_id], references: [id])
+  purchaseItemSerials PurchaseItemSerials[]
+}
+
+model PurchaseItemSerials {
+  id              Int @id @default(autoincrement())
+  purchaseItem_id Int
+  serial_id       Int
+
+  PurchasesItems PurchasesItems @relation(fields: [purchaseItem_id], references: [id])
+  ProductSerials ProductSerials @relation(fields: [serial_id], references: [id])
 }
 
 model PurchasesReturn {
   id          Int      @id @default(autoincrement())
+  returnNo    String   @unique
   totalPaid   Decimal
   note        String
   purchase_id Int
@@ -330,12 +395,24 @@ model PurchasesReturnItems {
   products_id       Int
   purchaseReturn_id Int
 
-  Products        Products        @relation(fields: [products_id], references: [id])
-  PurchasesReturn PurchasesReturn @relation(fields: [purchaseReturn_id], references: [id])
+  Products                  Products                    @relation(fields: [products_id], references: [id])
+  PurchasesReturn           PurchasesReturn             @relation(fields: [purchaseReturn_id], references: [id])
+  purchaseReturnItemSerials PurchaseReturnItemSerials[]
 }
 
+model PurchaseReturnItemSerials {
+  id                    Int @id @default(autoincrement())
+  purchaseReturnItem_id Int
+  serial_id             Int
+
+  PurchasesReturnItems PurchasesReturnItems @relation(fields: [purchaseReturnItem_id], references: [id])
+  ProductSerials       ProductSerials       @relation(fields: [serial_id], references: [id])
+}
+
+// Services and related models
 model Services {
   id                 Int      @id @default(autoincrement())
+  serviceNo          String   @unique
   serviceProductName String
   serviceDescription String
   serviceCost        Decimal
