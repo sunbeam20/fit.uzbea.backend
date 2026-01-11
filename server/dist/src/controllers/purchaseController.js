@@ -9,8 +9,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPurchaseStatistics = exports.getPurchasesBySupplier = exports.deletePurchase = exports.updatePurchase = exports.createPurchase = exports.getPurchaseById = exports.getAllPurchases = void 0;
+exports.searchPurchases = exports.getPurchaseStatistics = exports.getPurchasesBySupplier = exports.deletePurchase = exports.updatePurchase = exports.createPurchase = exports.getPurchaseById = exports.getAllPurchases = void 0;
 const prisma_1 = require("../../generated/prisma");
+const idGenerator_1 = require("../utils/idGenerator");
 const prisma = new prisma_1.PrismaClient();
 // Get all purchases with related data
 const getAllPurchases = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -32,7 +33,7 @@ const getAllPurchases = (req, res) => __awaiter(void 0, void 0, void 0, function
                 },
             },
             orderBy: {
-                id: 'desc',
+                id: "desc",
             },
         });
         res.json({
@@ -41,11 +42,11 @@ const getAllPurchases = (req, res) => __awaiter(void 0, void 0, void 0, function
         });
     }
     catch (error) {
-        console.error('Error fetching purchases:', error);
+        console.error("Error fetching purchases:", error);
         res.status(500).json({
             success: false,
-            message: 'Failed to fetch purchases',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            message: "Failed to fetch purchases",
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
@@ -77,7 +78,7 @@ const getPurchaseById = (req, res) => __awaiter(void 0, void 0, void 0, function
         if (!purchase) {
             return res.status(404).json({
                 success: false,
-                message: 'Purchase not found',
+                message: "Purchase not found",
             });
         }
         res.json({
@@ -86,11 +87,11 @@ const getPurchaseById = (req, res) => __awaiter(void 0, void 0, void 0, function
         });
     }
     catch (error) {
-        console.error('Error fetching purchase:', error);
+        console.error("Error fetching purchase:", error);
         res.status(500).json({
             success: false,
-            message: 'Failed to fetch purchase',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            message: "Failed to fetch purchase",
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
@@ -100,10 +101,14 @@ const createPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function*
     try {
         const { totalAmount, totalPaid, dueDate, note, supplier_id, user_id, items, } = req.body;
         // Validate required fields
-        if (!totalAmount || !supplier_id || !user_id || !items || !Array.isArray(items)) {
+        if (!totalAmount ||
+            !supplier_id ||
+            !user_id ||
+            !items ||
+            !Array.isArray(items)) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing required fields: totalAmount, supplier_id, user_id, and items array are required',
+                message: "Missing required fields: totalAmount, supplier_id, user_id, and items array are required",
             });
         }
         // Start transaction to ensure data consistency
@@ -111,10 +116,11 @@ const createPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function*
             // Create the purchase
             const purchase = yield tx.purchases.create({
                 data: {
+                    purchaseNo: yield (0, idGenerator_1.generateId)("purchases", "PUR"),
                     totalAmount: parseFloat(totalAmount),
                     totalPaid: parseFloat(totalPaid || 0),
                     dueDate: new Date(dueDate),
-                    note: note || '',
+                    note: note || "",
                     supplier_id: parseInt(supplier_id),
                     user_id: parseInt(user_id),
                 },
@@ -150,16 +156,16 @@ const createPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }));
         res.status(201).json({
             success: true,
-            message: 'Purchase created successfully',
+            message: "Purchase created successfully",
             data: result,
         });
     }
     catch (error) {
-        console.error('Error creating purchase:', error);
+        console.error("Error creating purchase:", error);
         res.status(500).json({
             success: false,
-            message: 'Failed to create purchase',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            message: "Failed to create purchase",
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
@@ -168,7 +174,7 @@ exports.createPurchase = createPurchase;
 const updatePurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const { totalAmount, totalPaid, dueDate, note, supplier_id, items, } = req.body;
+        const { totalAmount, totalPaid, dueDate, note, supplier_id, items } = req.body;
         // Check if purchase exists
         const existingPurchase = yield prisma.purchases.findUnique({
             where: { id: parseInt(id) },
@@ -177,7 +183,7 @@ const updatePurchase = (req, res) => __awaiter(void 0, void 0, void 0, function*
         if (!existingPurchase) {
             return res.status(404).json({
                 success: false,
-                message: 'Purchase not found',
+                message: "Purchase not found",
             });
         }
         // Start transaction
@@ -240,16 +246,16 @@ const updatePurchase = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }));
         res.json({
             success: true,
-            message: 'Purchase updated successfully',
+            message: "Purchase updated successfully",
             data: result,
         });
     }
     catch (error) {
-        console.error('Error updating purchase:', error);
+        console.error("Error updating purchase:", error);
         res.status(500).json({
             success: false,
-            message: 'Failed to update purchase',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            message: "Failed to update purchase",
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
@@ -266,7 +272,7 @@ const deletePurchase = (req, res) => __awaiter(void 0, void 0, void 0, function*
         if (!existingPurchase) {
             return res.status(404).json({
                 success: false,
-                message: 'Purchase not found',
+                message: "Purchase not found",
             });
         }
         // Start transaction to revert product quantities
@@ -293,15 +299,15 @@ const deletePurchase = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }));
         res.json({
             success: true,
-            message: 'Purchase deleted successfully',
+            message: "Purchase deleted successfully",
         });
     }
     catch (error) {
-        console.error('Error deleting purchase:', error);
+        console.error("Error deleting purchase:", error);
         res.status(500).json({
             success: false,
-            message: 'Failed to delete purchase',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            message: "Failed to delete purchase",
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
@@ -330,7 +336,7 @@ const getPurchasesBySupplier = (req, res) => __awaiter(void 0, void 0, void 0, f
                 },
             },
             orderBy: {
-                id: 'desc',
+                id: "desc",
             },
         });
         res.json({
@@ -339,11 +345,11 @@ const getPurchasesBySupplier = (req, res) => __awaiter(void 0, void 0, void 0, f
         });
     }
     catch (error) {
-        console.error('Error fetching purchases by supplier:', error);
+        console.error("Error fetching purchases by supplier:", error);
         res.status(500).json({
             success: false,
-            message: 'Failed to fetch purchases by supplier',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            message: "Failed to fetch purchases by supplier",
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
@@ -364,14 +370,18 @@ const getPurchaseStatistics = (req, res) => __awaiter(void 0, void 0, void 0, fu
             },
         });
         // Convert Decimal to number for arithmetic operations
-        const totalAmountNum = totalAmount._sum.totalAmount ? Number(totalAmount._sum.totalAmount) : 0;
-        const totalPaidNum = totalPaid._sum.totalPaid ? Number(totalPaid._sum.totalPaid) : 0;
+        const totalAmountNum = totalAmount._sum.totalAmount
+            ? Number(totalAmount._sum.totalAmount)
+            : 0;
+        const totalPaidNum = totalPaid._sum.totalPaid
+            ? Number(totalPaid._sum.totalPaid)
+            : 0;
         const totalDue = totalAmountNum - totalPaidNum;
         // Get recent purchases
         const recentPurchases = yield prisma.purchases.findMany({
             take: 5,
             orderBy: {
-                id: 'desc',
+                id: "desc",
             },
             include: {
                 Suppliers: true,
@@ -389,12 +399,81 @@ const getPurchaseStatistics = (req, res) => __awaiter(void 0, void 0, void 0, fu
         });
     }
     catch (error) {
-        console.error('Error fetching purchase statistics:', error);
+        console.error("Error fetching purchase statistics:", error);
         res.status(500).json({
             success: false,
-            message: 'Failed to fetch purchase statistics',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            message: "Failed to fetch purchase statistics",
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
 exports.getPurchaseStatistics = getPurchaseStatistics;
+// Search purchases
+const searchPurchases = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { query } = req.query;
+        console.log("Purchase search query received:", query);
+        if (!query || typeof query !== "string") {
+            return res.status(400).json({
+                error: "Search query is required",
+            });
+        }
+        const purchases = yield prisma.purchases.findMany({
+            where: {
+                OR: [
+                    {
+                        purchaseNo: {
+                            // ← ADD THIS: Search by purchase number
+                            contains: query,
+                            mode: "insensitive",
+                        },
+                    },
+                    {
+                        Suppliers: {
+                            name: {
+                                contains: query,
+                                mode: "insensitive",
+                            },
+                        },
+                    },
+                    {
+                        Suppliers: {
+                            phone: {
+                                contains: query,
+                            },
+                        },
+                    },
+                ],
+            },
+            include: {
+                Suppliers: true,
+                Users: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                PurchasesItems: {
+                    include: {
+                        Products: true,
+                    },
+                },
+            },
+            orderBy: {
+                id: "desc",
+            },
+            take: 20,
+        });
+        console.log(`Found ${purchases.length} purchases`);
+        res.json(purchases); // Just return the array, not wrapped in { success, data }
+    }
+    catch (error) {
+        console.error("Search purchases error:", error);
+        res.status(500).json({
+            error: "Failed to search purchases",
+            details: error instanceof Error ? error.message : "Unknown error",
+        });
+    }
+});
+exports.searchPurchases = searchPurchases;

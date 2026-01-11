@@ -7,6 +7,7 @@ const express_1 = __importDefault(require("express"));
 const salesController_1 = require("../controllers/salesController");
 const router = express_1.default.Router();
 router.get('/', salesController_1.getAllSales);
+router.get('/search', salesController_1.searchSales);
 router.get('/stats', salesController_1.getSalesStats);
 router.get('/date-range', salesController_1.getSalesByDateRange);
 router.get('/:id', salesController_1.getSaleById);

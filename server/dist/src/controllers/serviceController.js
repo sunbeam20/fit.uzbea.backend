@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteService = exports.updateService = exports.createService = exports.getServiceById = exports.getServices = void 0;
 const prisma_1 = require("../../generated/prisma");
+const idGenerator_1 = require("../utils/idGenerator");
 const prisma = new prisma_1.PrismaClient();
 // Helper function to convert Decimal to number
 const toNumber = (value) => {
@@ -112,6 +113,7 @@ const createService = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         // Create service
         const newService = yield prisma.services.create({
             data: {
+                serviceNo: yield (0, idGenerator_1.generateId)('services', 'SRV'),
                 serviceProductName,
                 serviceDescription,
                 serviceCost: parseFloat(serviceCost),

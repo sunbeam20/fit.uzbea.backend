@@ -20,6 +20,10 @@ const salesRoutes_1 = __importDefault(require("./routes/salesRoutes"));
 const customerRoutes_1 = __importDefault(require("./routes/customerRoutes"));
 const purchaseRoutes_1 = __importDefault(require("./routes/purchaseRoutes"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
+const posRoutes_1 = __importDefault(require("./routes/posRoutes"));
+const supplierRoutes_1 = __importDefault(require("./routes/supplierRoutes"));
+const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
+const permissionRoutes_1 = __importDefault(require("./routes/permissionRoutes"));
 // CONFIGURATIONS
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -42,6 +46,10 @@ app.use("/api/sale", salesRoutes_1.default);
 app.use("/api/customer", customerRoutes_1.default);
 app.use("/api/purchase", purchaseRoutes_1.default);
 app.use("/api/auth", authRoutes_1.default);
+app.use("/api/pos", posRoutes_1.default);
+app.use("/api/supplier", supplierRoutes_1.default);
+app.use("/api/users", userRoutes_1.default);
+app.use("/api/permission", permissionRoutes_1.default);
 // SERVER
 const port = process.env.PORT || 3001;
 app.listen(port, () => {

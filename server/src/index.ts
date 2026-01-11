@@ -17,16 +17,18 @@ import purchaseRoutes from "./routes/purchaseRoutes";
 import authRoutes from "./routes/authRoutes";
 import posRoutes from "./routes/posRoutes";
 import supplierRoutes from "./routes/supplierRoutes";
+import userRoutes from "./routes/userRoutes";
+import permissionRoutes from "./routes/permissionRoutes";
 
 // CONFIGURATIONS
 dotenv.config();
 const app = express();
 app.use(express.json());
 app.use(helmet());
-app.use(helmet.crossOriginResourcePolicy({policy: "cross-origin"}));
+app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 app.use(morgan("common"));
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: false}));
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
 // ROUTES
@@ -42,10 +44,12 @@ app.use("/api/customer", customerRoutes);
 app.use("/api/purchase", purchaseRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/pos", posRoutes);
-app.use("/api/supplier", supplierRoutes); // Supplier Routes
+app.use("/api/supplier", supplierRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/permission", permissionRoutes);
 
 // SERVER
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+  console.log(`Server running on port ${port}`);
 });

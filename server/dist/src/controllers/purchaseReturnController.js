@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deletePurchaseReturn = exports.updatePurchaseReturn = exports.createPurchaseReturn = exports.getPurchaseReturnById = exports.getPurchaseReturns = void 0;
 const prisma_1 = require("../../generated/prisma");
+const idGenerator_1 = require("../utils/idGenerator");
 const prisma = new prisma_1.PrismaClient();
 // GET all purchase returns
 const getPurchaseReturns = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -140,6 +141,7 @@ const createPurchaseReturn = (req, res) => __awaiter(void 0, void 0, void 0, fun
         // Create purchase return
         const newPurchaseReturn = yield prisma.purchasesReturn.create({
             data: {
+                returnNo: yield (0, idGenerator_1.generateId)('purchasesReturn', 'PRN'),
                 purchase_id: parseInt(purchase_id),
                 user_id: parseInt(user_id),
                 supplier_id: parseInt(supplier_id),

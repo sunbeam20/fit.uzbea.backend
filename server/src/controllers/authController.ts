@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "../../generated/prisma";
@@ -66,7 +66,7 @@ export const register = async (req: Request, res: Response) => {
         status: 'Active',
       },
       include: {
-        Roles: true
+        Roles: true  // This should be 'roles' if you changed it in schema
       }
     });
 
@@ -116,7 +116,7 @@ export const login = async (req: Request, res: Response) => {
         status: 'Active'
       },
       include: {
-        Roles: true
+        Roles: true  // This should be 'roles' if you changed it in schema
       }
     });
 
@@ -182,7 +182,7 @@ export const getMe = async (req: Request, res: Response) => {
         status: 'Active'
       },
       include: {
-        Roles: true
+        Roles: true  // This should be 'roles' if you changed it in schema
       }
     });
 
@@ -199,6 +199,7 @@ export const getMe = async (req: Request, res: Response) => {
       role: user.Roles?.name
     });
   } catch (error) {
+    console.error('Get me error:', error);
     res.status(401).json({
       message: 'Invalid token'
     });
@@ -209,4 +210,91 @@ export const logout = async (req: Request, res: Response) => {
   // Since we're using JWT tokens stored client-side, 
   // the logout is handled client-side by removing the token
   res.json({ message: 'Logged out successfully' });
+};
+
+export interface AuthRequest extends Request {
+  user?: any;
+}
+
+export const authenticate = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.header("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ 
+        success: false,
+        message: "No token provided" 
+      });
+      return;
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      
+      const user = await prisma.users.findUnique({
+        where: { id: decoded.userId },
+        include: { Roles: true },  // This should be 'roles' if you changed it in schema
+      });
+
+      if (!user) {
+        res.status(401).json({ 
+          success: false,
+          message: "User not found" 
+        });
+        return;
+      }
+
+      // Check if user is active
+      if (user.status !== "Active") {
+        res.status(403).json({ 
+          success: false,
+          message: "Account is inactive" 
+        });
+        return;
+      }
+
+      req.user = user;
+      next();
+    } catch (jwtError: any) {
+      console.error('JWT error:', jwtError);
+      res.status(401).json({ 
+        success: false,
+        message: "Invalid or expired token" 
+      });
+      return;
+    }
+  } catch (error) {
+    console.error("Authentication error:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Server error during authentication" 
+    });
+  }
+};
+
+export const authorize = (roles: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      res.status(401).json({ 
+        success: false,
+        message: "Authentication required" 
+      });
+      return;
+    }
+
+    if (!roles.includes(req.user.Roles?.name)) {
+      res.status(403).json({ 
+        success: false,
+        message: "Insufficient permissions" 
+      });
+      return;
+    }
+
+    next();
+  };
 };

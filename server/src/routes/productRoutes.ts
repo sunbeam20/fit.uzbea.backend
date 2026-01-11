@@ -16,10 +16,12 @@ import {
   getProductSerials,
   updateSerialStatus,
 } from "../controllers/productController";
+import { checkPageAccess, checkDataPermission } from "../middleware/permissionMiddleware";
+import { authenticate } from "../controllers/authController";
 
 const router = express.Router();
 
-router.get("/", getProducts);
+router.get("/", authenticate, getProducts);
 router.get("/search", searchProducts);
 router.get("/pos", getProductsPOS);
 // router.get('/barcode/:barcode', scanBarcode);

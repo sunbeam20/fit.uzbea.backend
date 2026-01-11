@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createCategory = exports.getCategoryById = exports.getCategories = void 0;
+exports.deleteCategory = exports.updateCategory = exports.createCategory = exports.getCategoryById = exports.getCategories = void 0;
 const prisma_1 = require("../../generated/prisma");
 const prisma = new prisma_1.PrismaClient();
 // GET all categories
@@ -51,6 +51,10 @@ exports.getCategoryById = getCategoryById;
 const createCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { name } = req.body;
+        if (!name || name.trim() === "") {
+            res.status(400).json({ message: "Category name is required" });
+            return;
+        }
         const newCategory = yield prisma.categories.create({
             data: { name },
         });
@@ -62,3 +66,55 @@ const createCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.createCategory = createCategory;
+// PUT update category
+const updateCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+        if (!name || name.trim() === "") {
+            res.status(400).json({ message: "Category name is required" });
+            return;
+        }
+        const updatedCategory = yield prisma.categories.update({
+            where: { id: parseInt(id) },
+            data: { name },
+        });
+        res.json(updatedCategory);
+    }
+    catch (error) {
+        console.error("Error updating category:", error);
+        res.status(500).json({ message: "Error updating category" });
+    }
+});
+exports.updateCategory = updateCategory;
+// DELETE category
+const deleteCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        // Check if category exists
+        const category = yield prisma.categories.findUnique({
+            where: { id: parseInt(id) },
+        });
+        if (!category) {
+            res.status(404).json({ message: "Category not found" });
+            return;
+        }
+        // Check if category has products
+        const products = yield prisma.products.findFirst({
+            where: { category_id: parseInt(id) },
+        });
+        if (products) {
+            res.status(400).json({ message: "Cannot delete category with existing products" });
+            return;
+        }
+        yield prisma.categories.delete({
+            where: { id: parseInt(id) },
+        });
+        res.json({ message: "Category deleted successfully" });
+    }
+    catch (error) {
+        console.error("Error deleting category:", error);
+        res.status(500).json({ message: "Error deleting category" });
+    }
+});
+exports.deleteCategory = deleteCategory;

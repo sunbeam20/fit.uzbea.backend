@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteSalesReturn = exports.updateSalesReturn = exports.createSalesReturn = exports.getSalesReturnById = exports.getSalesReturns = void 0;
 const prisma_1 = require("../../generated/prisma");
+const idGenerator_1 = require("../utils/idGenerator");
 const prisma = new prisma_1.PrismaClient();
 // GET all sales returns
 const getSalesReturns = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -140,6 +141,7 @@ const createSalesReturn = (req, res) => __awaiter(void 0, void 0, void 0, functi
         // Create sales return
         const newSalesReturn = yield prisma.salesReturn.create({
             data: {
+                returnNo: yield (0, idGenerator_1.generateId)('salesReturn', 'SRN'),
                 sales_id: parseInt(sales_id),
                 user_id: parseInt(user_id),
                 customer_id: parseInt(customer_id),

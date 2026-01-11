@@ -23,10 +23,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logout = exports.getMe = exports.login = exports.register = void 0;
+exports.authorize = exports.authenticate = exports.logout = exports.getMe = exports.login = exports.register = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = require("../../generated/prisma");
+const idGenerator_1 = require("../utils/idGenerator");
 const prisma = new prisma_1.PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -60,7 +61,7 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         // Get default role
         const defaultRole = yield prisma.roles.findFirst({
-            where: { name: 'user' }
+            where: { name: 'Sales' }
         });
         if (!defaultRole) {
             return res.status(500).json({
@@ -72,6 +73,7 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         // Create user
         const user = yield prisma.users.create({
             data: {
+                userId: yield (0, idGenerator_1.generateId)('users', 'USR'),
                 name,
                 email,
                 password: hashedPassword,
@@ -79,7 +81,7 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 status: 'Active',
             },
             include: {
-                Roles: true
+                Roles: true // This should be 'roles' if you changed it in schema
             }
         });
         // Generate token
@@ -119,7 +121,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 status: 'Active'
             },
             include: {
-                Roles: true
+                Roles: true // This should be 'roles' if you changed it in schema
             }
         });
         if (!user) {
@@ -173,7 +175,7 @@ const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 status: 'Active'
             },
             include: {
-                Roles: true
+                Roles: true // This should be 'roles' if you changed it in schema
             }
         });
         if (!user) {
@@ -186,6 +188,7 @@ const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         res.json(Object.assign(Object.assign({}, userWithoutPassword), { role: (_b = user.Roles) === null || _b === void 0 ? void 0 : _b.name }));
     }
     catch (error) {
+        console.error('Get me error:', error);
         res.status(401).json({
             message: 'Invalid token'
         });
@@ -198,3 +201,77 @@ const logout = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.json({ message: 'Logged out successfully' });
 });
 exports.logout = logout;
+const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const authHeader = req.header("Authorization");
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            res.status(401).json({
+                success: false,
+                message: "No token provided"
+            });
+            return;
+        }
+        const token = authHeader.replace("Bearer ", "");
+        try {
+            const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+            const user = yield prisma.users.findUnique({
+                where: { id: decoded.userId },
+                include: { Roles: true }, // This should be 'roles' if you changed it in schema
+            });
+            if (!user) {
+                res.status(401).json({
+                    success: false,
+                    message: "User not found"
+                });
+                return;
+            }
+            // Check if user is active
+            if (user.status !== "Active") {
+                res.status(403).json({
+                    success: false,
+                    message: "Account is inactive"
+                });
+                return;
+            }
+            req.user = user;
+            next();
+        }
+        catch (jwtError) {
+            console.error('JWT error:', jwtError);
+            res.status(401).json({
+                success: false,
+                message: "Invalid or expired token"
+            });
+            return;
+        }
+    }
+    catch (error) {
+        console.error("Authentication error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server error during authentication"
+        });
+    }
+});
+exports.authenticate = authenticate;
+const authorize = (roles) => {
+    return (req, res, next) => {
+        var _a;
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
+            return;
+        }
+        if (!roles.includes((_a = req.user.Roles) === null || _a === void 0 ? void 0 : _a.name)) {
+            res.status(403).json({
+                success: false,
+                message: "Insufficient permissions"
+            });
+            return;
+        }
+        next();
+    };
+};
+exports.authorize = authorize;

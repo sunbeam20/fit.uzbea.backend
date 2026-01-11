@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteExchange = exports.updateExchange = exports.createExchange = exports.getExchangeById = exports.getExchanges = void 0;
 const prisma_1 = require("../../generated/prisma");
+const idGenerator_1 = require("../utils/idGenerator");
 const prisma = new prisma_1.PrismaClient();
 // Helper function to convert Decimal to number
 const toNumber = (value) => {
@@ -158,6 +159,7 @@ const createExchange = (req, res) => __awaiter(void 0, void 0, void 0, function*
         // Create exchange
         const newExchange = yield prisma.exchanges.create({
             data: {
+                exchangeNo: yield (0, idGenerator_1.generateId)('exchanges', 'EXC'),
                 sales_id: parseInt(sales_id),
                 user_id: parseInt(user_id),
                 customer_id: parseInt(customer_id),

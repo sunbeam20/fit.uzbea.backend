@@ -14,12 +14,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Permission model
+model Permissions {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+
+  rolePermissions RolePermissions[]
+}
+
+// Role Permissions Junction
+model RolePermissions {
+  id            Int     @id @default(autoincrement())
+  role_id       Int
+  permission_id Int
+  can_view      Boolean @default(false)
+  can_create    Boolean @default(false)
+  can_edit      Boolean @default(false)
+  can_delete    Boolean @default(false)
+
+  Roles       Roles       @relation(fields: [role_id], references: [id])
+  Permissions Permissions @relation(fields: [permission_id], references: [id])
+
+  @@unique([role_id, permission_id])
+}
+
 // Roles model
 model Roles {
   id   Int    @id @default(autoincrement())
   name String @unique
 
-  Users Users[]
+  Users           Users[]
+  rolePermissions RolePermissions[]
 }
 
 // Session model
@@ -35,19 +61,21 @@ model Session {
 
 // Users model with enum
 model Users {
-  id        Int      @id @default(autoincrement())
-  userId    String   @unique
-  name      String
-  email     String   @unique
-  password  String
-  status    Status   @default(Active)
-  role_id   Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  Int      @id @default(autoincrement())
+  userId              String   @unique
+  name                String
+  email               String   @unique
+  password            String
+  status              Status   @default(Active)
+  role_id             Int
+  phone               String?
+  address             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  permissionOverrides Json?
 
-  Roles   Roles?    @relation(fields: [role_id], references: [id])
-  Session Session[]
-
+  Roles           Roles?            @relation(fields: [role_id], references: [id])
+  Session         Session[]
   Sales           Sales[]
   SalesReturn     SalesReturn[]
   Exchanges       Exchanges[]
@@ -218,7 +246,7 @@ model Sales {
 }
 
 model SalesItems {
-  id         Int     @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   quantity   Int
   unitPrice  Decimal
   discount   Decimal?

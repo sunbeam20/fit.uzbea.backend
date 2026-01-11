@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getCustomersWithPagination = exports.getCustomerStats = exports.searchCustomers = exports.deleteCustomer = exports.updateCustomer = exports.createCustomer = exports.getCustomerById = exports.getAllCustomers = void 0;
 const prisma_1 = require("../../generated/prisma");
+const idGenerator_1 = require("../utils/idGenerator");
 const prisma = new prisma_1.PrismaClient();
 // Get all customers
 const getAllCustomers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -165,6 +166,7 @@ const createCustomer = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }
         const customer = yield prisma.customers.create({
             data: {
+                custId: yield (0, idGenerator_1.generateId)('customers', 'CUST'),
                 name,
                 email: email || null,
                 phone,
@@ -282,33 +284,35 @@ const deleteCustomer = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.deleteCustomer = deleteCustomer;
-// Search customers - FIXED VERSION
+// Search customers
 const searchCustomers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { query } = req.query;
+        console.log("Customer search query:", query);
         if (!query || typeof query !== 'string') {
-            res.status(400).json({ error: 'Search query is required' });
+            console.log("Empty query, returning empty array");
+            res.json([]);
             return;
         }
-        // Use the correct Prisma query mode
         const customers = yield prisma.customers.findMany({
             where: {
                 OR: [
                     {
                         name: {
                             contains: query,
-                            mode: 'insensitive', // Use const assertion
+                            mode: 'insensitive',
                         },
                     },
                     {
                         email: {
                             contains: query,
-                            mode: 'insensitive', // Use const assertion
+                            mode: 'insensitive',
                         },
                     },
                     {
                         phone: {
                             contains: query,
+                            mode: 'insensitive',
                         },
                     },
                 ],
@@ -324,13 +328,17 @@ const searchCustomers = (req, res) => __awaiter(void 0, void 0, void 0, function
             orderBy: {
                 name: 'asc',
             },
-            take: 50, // Limit results
+            take: 10, // Reduced from 50 to 10 for better performance
         });
+        console.log(`Found ${customers.length} customers for search: "${query}"`);
         res.json(customers);
     }
     catch (error) {
         console.error('Error searching customers:', error);
-        res.status(500).json({ error: 'Failed to search customers' });
+        res.status(500).json({
+            error: 'Failed to search customers',
+            details: error instanceof Error ? error.message : String(error)
+        });
     }
 });
 exports.searchCustomers = searchCustomers;

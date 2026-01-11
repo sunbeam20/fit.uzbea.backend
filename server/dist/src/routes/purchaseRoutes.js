@@ -4,6 +4,7 @@ const express_1 = require("express");
 const purchaseController_1 = require("../controllers/purchaseController");
 const router = (0, express_1.Router)();
 router.get('/', purchaseController_1.getAllPurchases);
+router.get('/search', purchaseController_1.searchPurchases);
 router.get('/statistics', purchaseController_1.getPurchaseStatistics);
 router.get('/supplier/:supplierId', purchaseController_1.getPurchasesBySupplier);
 router.get('/:id', purchaseController_1.getPurchaseById);

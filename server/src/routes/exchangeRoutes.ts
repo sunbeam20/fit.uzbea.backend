@@ -6,6 +6,7 @@ import {
   updateExchange, 
   deleteExchange 
 } from '../controllers/exchangeController';
+import { checkPageAccess } from '../middleware/permissionMiddleware';
 
 const router = express.Router();
 
