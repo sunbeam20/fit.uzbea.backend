@@ -9,8 +9,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export const register = async (req: Request, res: Response) => {
   try {
-    console.log('Registration attempt:', req.body);
-    
     const { name, email, password, password_confirmation } = req.body;
 
     // Validation
@@ -32,8 +30,6 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    console.log('Checking for existing user...');
-    
     // Check if user already exists
     const existingUser = await prisma.users.findFirst({
       where: { email }
@@ -45,8 +41,6 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    console.log('Getting default role...');
-    
     // Get default role
     const defaultRole = await prisma.roles.findFirst({
       where: { name: 'Sales' }
@@ -58,13 +52,9 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    console.log('Hashing password...');
-    
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    console.log('Creating user with role ID:', defaultRole.id);
-    
     // Create user
     const user = await prisma.users.create({
       data: {
@@ -80,8 +70,6 @@ export const register = async (req: Request, res: Response) => {
       }
     });
 
-    console.log('User created:', user.id);
-    
     // Generate token
     const token = jwt.sign(
       { 
@@ -104,21 +92,10 @@ export const register = async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error('Registration error details:', error);
-    console.error('Error stack:', error.stack);
-    
-    // More specific error message
-    if (error.code) {
-      res.status(500).json({
-        message: `Database error: ${error.code}`,
-        details: error.message
-      });
-    } else {
-      res.status(500).json({
-        message: 'Internal server error',
-        details: error.message
-      });
-    }
+    console.error('Registration error:', error);
+    res.status(500).json({
+      message: 'Internal server error'
+    });
   }
 };
 
