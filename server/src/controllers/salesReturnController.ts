@@ -122,6 +122,8 @@ export const createSalesReturn = async (req: Request, res: Response) => {
       items 
     } = req.body;
 
+    console.log("Received sales return request:", req.body);
+
     // Validate required fields
     if (!sales_id || !user_id || !customer_id || !total_payback || !items || !Array.isArray(items)) {
       res.status(400).json({ 
@@ -130,10 +132,23 @@ export const createSalesReturn = async (req: Request, res: Response) => {
       return;
     }
 
-    // Create sales return
+    // Validate items array
+    for (const item of items) {
+      if (!item.product_id || !item.quantity || item.quantity <= 0) {
+        res.status(400).json({ 
+          message: "Invalid item data: product_id and quantity (positive) are required" 
+        });
+        return;
+      }
+    }
+
+    // Generate return number
+    const returnNo = await generateId('salesReturn', 'SRN');
+
+    // Create sales return WITH CORRECT RELATION SYNTAX
     const newSalesReturn = await prisma.salesReturn.create({
       data: {
-        returnNo: await generateId('salesReturn', 'SRN'),
+        returnNo: returnNo,
         sales_id: parseInt(sales_id),
         user_id: parseInt(user_id),
         customer_id: parseInt(customer_id),
@@ -141,9 +156,12 @@ export const createSalesReturn = async (req: Request, res: Response) => {
         note: note || 'No reason provided',
         SalesReturnItems: {
           create: items.map((item: any) => ({
-            product_id: item.product_id,
             quantity: item.quantity,
-            unitPrice: item.price
+            unitPrice: item.unitPrice || item.price || 0,
+            // Use the relation name, not the foreign key field name
+            Products: {
+              connect: { id: item.product_id }
+            }
           }))
         }
       },
@@ -159,10 +177,27 @@ export const createSalesReturn = async (req: Request, res: Response) => {
       }
     });
 
+    // If items have serials, update their status
+    for (const item of items) {
+      if (item.serials && Array.isArray(item.serials) && item.serials.length > 0) {
+        // Update each serial to mark it as returned
+        for (const serial of item.serials) {
+          await prisma.productSerials.updateMany({
+            where: {
+              serial: serial,
+            },
+            data: {
+              status: 'Returned', // Changed from 'Available' to 'Returned'
+            }
+          });
+        }
+      }
+    }
+
     // Transform the response
     const transformedReturn = {
       id: newSalesReturn.id,
-      return_number: `SRN-${newSalesReturn.id.toString().padStart(3, '0')}`,
+      return_number: newSalesReturn.returnNo,
       original_invoice: `INV-${newSalesReturn.sales_id.toString().padStart(3, '0')}`,
       customer_name: newSalesReturn.Customers?.name || 'N/A',
       customer_phone: newSalesReturn.Customers?.phone || '',
@@ -178,7 +213,7 @@ export const createSalesReturn = async (req: Request, res: Response) => {
         product_name: item.Products?.name || 'Unknown Product',
         quantity: item.quantity,
         price: parseFloat(item.unitPrice.toString()),
-        return_reason: 'Defective'
+        // Note: discount and returnReason fields don't exist in your SalesReturnItems model
       })),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -187,7 +222,15 @@ export const createSalesReturn = async (req: Request, res: Response) => {
     res.status(201).json(transformedReturn);
   } catch (error) {
     console.error("Error creating sales return:", error);
-    res.status(500).json({ message: "Error creating sales return" });
+    let errorMessage = "";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'object' && error !== null && 'message' in error) {
+      errorMessage = (error as any).message;
+    } else {
+      errorMessage = String(error);
+    }
+    res.status(500).json({ message: "Error creating sales return", error: errorMessage });
   }
 };
 
@@ -266,5 +309,24 @@ export const deleteSalesReturn = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error deleting sales return:", error);
     res.status(500).json({ message: "Error deleting sales return" });
+  }
+};
+
+export const debugSalesReturnSchema = async (req: Request, res: Response) => {
+  try {
+    // Try to access the Prisma model to see available fields
+    const salesReturnFields = prisma.salesReturn.fields;
+    const salesReturnItemsFields = prisma.salesReturnItems.fields;
+    
+    console.log("SalesReturn fields:", Object.keys(salesReturnFields));
+    console.log("SalesReturnItems fields:", Object.keys(salesReturnItemsFields));
+    
+    res.json({
+      salesReturnFields: Object.keys(salesReturnFields),
+      salesReturnItemsFields: Object.keys(salesReturnItemsFields)
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: errorMessage });
   }
 };

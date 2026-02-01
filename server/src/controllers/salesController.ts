@@ -58,6 +58,37 @@ async function generateSaleNumber(): Promise<string> {
   return `S-${nextNumber.toString().padStart(5, "0")}`;
 }
 
+// Helper function to get product's retail price based on whether it's serialized
+async function getProductRetailPrice(productId: number): Promise<number> {
+  const product = await prisma.products.findUnique({
+    where: { id: productId },
+    include: {
+      productSerials: {
+        where: { status: "Available" },
+        take: 1,
+      },
+    },
+  });
+
+  if (!product) {
+    throw new Error(`Product with ID ${productId} not found`);
+  }
+
+  if (product.useIndividualSerials) {
+    // For serialized products, get retail price from available serial
+    const availableSerial = product.productSerials[0];
+    if (!availableSerial) {
+      throw new Error(`No available serials for product ID ${productId}`);
+    }
+    return Number(availableSerial.retailPrice);
+  } else {
+    // For non-serialized products, we need to return a default price
+    // Since we removed pricing from products, we should get it from somewhere else
+    // For now, we'll return 0 and handle validation in createSale
+    return 0;
+  }
+}
+
 // Get all sales with related data
 export const getAllSales = async (
   req: Request,
@@ -89,7 +120,6 @@ export const getAllSales = async (
                 id: true,
                 name: true,
                 specification: true,
-                retailPrice: true,
                 useIndividualSerials: true,
               },
             },
@@ -99,6 +129,7 @@ export const getAllSales = async (
                   select: {
                     serial: true,
                     status: true,
+                    retailPrice: true,
                   },
                 },
               },
@@ -152,9 +183,6 @@ export const getSaleById = async (
                 id: true,
                 name: true,
                 specification: true,
-                retailPrice: true,
-                wholesalePrice: true,
-                purchasePrice: true,
                 useIndividualSerials: true,
               },
             },
@@ -165,6 +193,7 @@ export const getSaleById = async (
                     serial: true,
                     status: true,
                     warranty: true,
+                    retailPrice: true,
                   },
                 },
               },
@@ -201,6 +230,9 @@ export const createSale = async (
       dueDate,
       items,
     } = req.body;
+
+    console.log("=== CREATE SALE REQUEST ===");
+    console.log("Request body:", req.body);
 
     // Validate required fields
     if (!customer_id || !user_id || !totalAmount || !items || !items.length) {
@@ -246,13 +278,6 @@ export const createSale = async (
             throw new Error(`Product ${product.name} is not active`);
           }
 
-          // Validate price matches retail price
-          if (Number(item.unitPrice) !== Number(product.retailPrice)) {
-            throw new Error(
-              `Unit price for ${product.name} does not match retail price`
-            );
-          }
-
           if (product.useIndividualSerials) {
             // For serialized products
             if (!item.serials || item.serials.length === 0) {
@@ -283,6 +308,13 @@ export const createSale = async (
                   `Serial ${serial} not found or not available for product ${product.name}`
                 );
               }
+
+              // Validate price matches serial's retail price
+              if (Number(item.unitPrice) !== Number(productSerial.retailPrice)) {
+                console.warn(`Price mismatch for serial ${serial}. Item price: ${item.unitPrice}, Serial retail price: ${productSerial.retailPrice}`);
+                // We'll still allow it, but log a warning
+              }
+
               return productSerial;
             });
 
@@ -309,6 +341,10 @@ export const createSale = async (
               );
             }
 
+            // For non-serialized products, we can't validate price since it's not in the product table
+            // We'll accept the provided price
+            console.log(`Non-serialized product ${product.name}: accepting provided price ${item.unitPrice}`);
+
             return {
               product,
               item,
@@ -318,15 +354,27 @@ export const createSale = async (
         })
       );
 
+      // Calculate total amount from items to validate against provided totalAmount
+      const calculatedTotal = productValidations.reduce((total, validation) => {
+        const itemTotal = validation.item.quantity * validation.item.unitPrice;
+        return total + itemTotal - (validation.item.discount || 0);
+      }, 0);
+
+      // Validate calculated total matches provided totalAmount (with some tolerance)
+      if (Math.abs(calculatedTotal - totalAmount) > 0.01) {
+        console.warn(`Total amount mismatch. Calculated: ${calculatedTotal}, Provided: ${totalAmount}`);
+        // We'll continue but use the calculated total
+      }
+
       // Create the sale
       const sale = await tx.sales.create({
         data: {
           saleNo,
-          totalAmount,
+          totalAmount: calculatedTotal, // Use calculated total
           totalPaid: totalPaid || 0,
           totaldiscount: totaldiscount || 0,
           dueDate: dueDate ? new Date(dueDate) : null,
-          status: (totalPaid || 0) >= totalAmount ? "Completed" : "Pending",
+          status: (totalPaid || 0) >= calculatedTotal ? "Completed" : "Pending",
           customer_id,
           user_id,
         },
@@ -350,7 +398,7 @@ export const createSale = async (
 
           if (product.useIndividualSerials && serials) {
             // For serialized products
-            // 1. Update each serial status to 'Sold'
+            // 1. Update each serial status to 'Sold' and record sold price
             // 2. Create SalesItemSerials records linking SalesItems to ProductSerials
             await Promise.all(
               serials.map(async (serial) => {
@@ -363,15 +411,28 @@ export const createSale = async (
                   },
                 });
 
-                // Create SalesItemSerials record
+                // Create SalesItemSerials record with sold price
                 await tx.salesItemSerials.create({
                   data: {
                     salesItem_id: saleItem.id,
                     serial_id: serial.id,
+                    soldPrice: item.unitPrice, // Record the actual sold price
+                    soldAt: new Date(),
                   },
                 });
               })
             );
+
+            // Update product quantity (decrement by number of serials sold)
+            await tx.products.update({
+              where: { id: product.id },
+              data: {
+                quantity: {
+                  decrement: item.quantity,
+                },
+                updatedAt: new Date(),
+              },
+            });
           } else {
             // For non-serialized products, decrement quantity
             await tx.products.update({
@@ -395,6 +456,7 @@ export const createSale = async (
       return {
         sale,
         saleItems,
+        calculatedTotal,
       };
     });
 
@@ -412,7 +474,6 @@ export const createSale = async (
                 name: true,
                 productCode: true,
                 useIndividualSerials: true,
-                retailPrice: true,
               },
             },
             salesItemSerials: {
@@ -423,6 +484,7 @@ export const createSale = async (
                     serial: true,
                     status: true,
                     warranty: true,
+                    retailPrice: true,
                   },
                 },
               },
@@ -435,6 +497,222 @@ export const createSale = async (
     res.status(201).json(completeSale);
   } catch (error: any) {
     console.error("Error creating sale:", error);
+    res.status(400).json({
+      error: "Failed to create sale",
+      message: error.message,
+    });
+  }
+};
+
+// Create sale from POS (simplified version)
+export const createSaleFromPOS = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const {
+      customer_id,
+      items,
+      totalAmount,
+      totalPaid = 0,
+      discount = 0,
+    } = req.body;
+
+    console.log("=== CREATE SALE FROM POS REQUEST ===");
+    console.log("Request body:", req.body);
+
+    // Validate required fields
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ error: "Items are required" });
+      return;
+    }
+
+    // Get default user (POS user) or use provided user_id
+    const posUser = await prisma.users.findFirst({
+      where: { email: "sales@example.com" }, // Default POS user
+    });
+
+    if (!posUser) {
+      res.status(400).json({ error: "POS user not found" });
+      return;
+    }
+
+    const user_id = posUser.id;
+
+    // Generate sale number
+    const saleNo = await generateSaleNumber();
+
+    // Start transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Validate customer if provided
+      if (customer_id) {
+        const customer = await tx.customers.findUnique({
+          where: { id: customer_id },
+        });
+        if (!customer) {
+          throw new Error(`Customer with ID ${customer_id} not found`);
+        }
+      }
+
+      // Process items
+      const processedItems = await Promise.all(
+        items.map(async (item: any) => {
+          const product = await tx.products.findUnique({
+            where: { id: item.product_id },
+            include: {
+              productSerials: {
+                where: { status: "Available" },
+              },
+            },
+          });
+
+          if (!product) {
+            throw new Error(`Product with ID ${item.product_id} not found`);
+          }
+
+          if (product.useIndividualSerials) {
+            // For serialized products, get available serials
+            const availableSerials = product.productSerials.slice(0, item.quantity);
+            if (availableSerials.length < item.quantity) {
+              throw new Error(
+                `Insufficient available serials for ${product.name}. Available: ${availableSerials.length}, Requested: ${item.quantity}`
+              );
+            }
+
+            const serials = availableSerials.map(s => s.serial);
+            const unitPrice = availableSerials[0]?.retailPrice || item.unitPrice;
+
+            return {
+              ...item,
+              serials,
+              unitPrice: Number(unitPrice),
+              product,
+              availableSerials,
+            };
+          } else {
+            // For non-serialized products
+            if (product.quantity < item.quantity) {
+              throw new Error(
+                `Insufficient quantity for ${product.name}. Available: ${product.quantity}, Requested: ${item.quantity}`
+              );
+            }
+            return {
+              ...item,
+              product,
+            };
+          }
+        })
+      );
+
+      // Calculate total from processed items
+      const calculatedTotal = processedItems.reduce((total, item) => {
+        const itemTotal = item.quantity * item.unitPrice;
+        const itemDiscount = item.discount?.type === 'percentage' 
+          ? itemTotal * (item.discount.value / 100)
+          : item.discount?.value || 0;
+        return total + itemTotal - itemDiscount;
+      }, 0);
+
+      // Create the sale
+      const sale = await tx.sales.create({
+        data: {
+          saleNo,
+          totalAmount: calculatedTotal,
+          totalPaid: totalPaid || 0,
+          totaldiscount: discount || 0,
+          dueDate: null,
+          status: "Completed", // POS sales are usually completed immediately
+          customer_id: customer_id || null,
+          user_id,
+        },
+      });
+
+      // Create sale items
+      const saleItems = await Promise.all(
+        processedItems.map(async (item) => {
+          const saleItem = await tx.salesItems.create({
+            data: {
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discount: item.discount?.value || 0,
+              sales_id: sale.id,
+              product_id: item.product_id,
+            },
+          });
+
+          if (item.product.useIndividualSerials && item.availableSerials) {
+            // Update serials and create SalesItemSerials
+            await Promise.all(
+              item.availableSerials.map(async (serial: { id: any; }) => {
+                await tx.productSerials.update({
+                  where: { id: serial.id },
+                  data: {
+                    status: "Sold",
+                    updatedAt: new Date(),
+                  },
+                });
+
+                await tx.salesItemSerials.create({
+                  data: {
+                    salesItem_id: saleItem.id,
+                    serial_id: serial.id,
+                    soldPrice: item.unitPrice,
+                    soldAt: new Date(),
+                  },
+                });
+              })
+            );
+
+            // Update product quantity
+            await tx.products.update({
+              where: { id: item.product_id },
+              data: {
+                quantity: {
+                  decrement: item.quantity,
+                },
+              },
+            });
+          } else {
+            // Update product quantity for non-serialized
+            await tx.products.update({
+              where: { id: item.product_id },
+              data: {
+                quantity: {
+                  decrement: item.quantity,
+                },
+              },
+            });
+          }
+
+          return saleItem;
+        })
+      );
+
+      return { sale, saleItems };
+    });
+
+    // Fetch complete sale
+    const completeSale = await prisma.sales.findUnique({
+      where: { id: result.sale.id },
+      include: {
+        Customers: true,
+        Users: true,
+        SalesItems: {
+          include: {
+            Products: true,
+            salesItemSerials: {
+              include: {
+                ProductSerials: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.status(201).json(completeSale);
+  } catch (error: any) {
+    console.error("Error creating sale from POS:", error);
     res.status(400).json({
       error: "Failed to create sale",
       message: error.message,
@@ -488,6 +766,12 @@ export const updateSale = async (
       }
     }
 
+    // Update sale status based on payment
+    let status = existingSale.status;
+    // if (totalPaid !== undefined) {
+    //   status = totalPaid >= existingSale.totalAmount ? "Completed" : "Pending";
+    // }
+
     const updatedSale = await prisma.sales.update({
       where: { id: parseInt(id) },
       data: {
@@ -496,6 +780,7 @@ export const updateSale = async (
         ...(dueDate && { dueDate: new Date(dueDate) }),
         ...(customer_id && { customer_id }),
         ...(user_id && { user_id }),
+        status,
       },
       include: {
         Customers: true,
@@ -560,7 +845,7 @@ export const deleteSale = async (
         sale.SalesItems.map(async (salesItem) => {
           const product = salesItem.Products;
 
-          // Check if product exists (should always exist, but TypeScript needs this check)
+          // Check if product exists
           if (!product) {
             console.warn(
               `Product not found for SalesItem ${salesItem.id}, skipping restoration`
@@ -584,6 +869,17 @@ export const deleteSale = async (
                 });
               })
             );
+
+            // Restore product quantity
+            await tx.products.update({
+              where: { id: product.id },
+              data: {
+                quantity: {
+                  increment: salesItem.quantity,
+                },
+                updatedAt: new Date(),
+              },
+            });
           } else {
             // For non-serialized products, restore quantity
             await tx.products.update({
@@ -597,7 +893,7 @@ export const deleteSale = async (
             });
           }
 
-          // Delete SalesItemSerials (if not cascading)
+          // Delete SalesItemSerials
           await tx.salesItemSerials.deleteMany({
             where: { salesItem_id: salesItem.id },
           });
@@ -726,7 +1022,16 @@ export const getSalesByDateRange = async (
             Products: {
               select: {
                 name: true,
-                retailPrice: true,
+              },
+            },
+            salesItemSerials: {
+              include: {
+                ProductSerials: {
+                  select: {
+                    serial: true,
+                    retailPrice: true,
+                  },
+                },
               },
             },
           },
@@ -779,6 +1084,34 @@ export const searchSales = async (req: Request, res: Response) => {
               },
             },
           },
+          {
+            SalesItems: {
+              some: {
+                Products: {
+                  name: {
+                    contains: query,
+                    mode: "insensitive",
+                  },
+                },
+              },
+            },
+          },
+          {
+            SalesItems: {
+              some: {
+                salesItemSerials: {
+                  some: {
+                    ProductSerials: {
+                      serial: {
+                        contains: query,
+                        mode: "insensitive",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         ],
       },
       include: {
@@ -805,9 +1138,6 @@ export const searchSales = async (req: Request, res: Response) => {
                 id: true,
                 name: true,
                 specification: true,
-                retailPrice: true,
-                wholesalePrice: true,
-                purchasePrice: true,
                 useIndividualSerials: true,
                 productCode: true,
               },
@@ -820,6 +1150,7 @@ export const searchSales = async (req: Request, res: Response) => {
                     serial: true,
                     status: true,
                     warranty: true,
+                    retailPrice: true,
                   },
                 },
               },
@@ -840,5 +1171,74 @@ export const searchSales = async (req: Request, res: Response) => {
       error: "Failed to search sales",
       details: error instanceof Error ? error.message : "Unknown error",
     });
+  }
+};
+
+// Get sale by invoice number
+export const getSaleByInvoice = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { invoiceNumber } = req.params;
+
+    const sale = await prisma.sales.findFirst({
+      where: {
+        saleNo: invoiceNumber,
+      },
+      include: {
+        Customers: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+          },
+        },
+        Users: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        SalesItems: {
+          include: {
+            Products: {
+              select: {
+                id: true,
+                name: true,
+                specification: true,
+                useIndividualSerials: true,
+              },
+            },
+            salesItemSerials: {
+              include: {
+                ProductSerials: {
+                  select: {
+                    id: true,
+                    serial: true,
+                    status: true,
+                    warranty: true,
+                    retailPrice: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!sale) {
+      res.status(404).json({ error: "Sale not found" });
+      return;
+    }
+
+    res.json(sale);
+  } catch (error) {
+    console.error("Error fetching sale by invoice:", error);
+    res.status(500).json({ error: "Failed to fetch sale" });
   }
 };
