@@ -7,23 +7,26 @@ import {
   ProductStatus,
 } from "../generated/prisma";
 import bcrypt from "bcryptjs";
-import { Decimal } from "@prisma/client/runtime/library";
 
 const prisma = new PrismaClient();
-
-// Helper function to create Decimal values
-const decimal = (value: number) => new Decimal(value.toString());
 
 // Helper function to generate sequential IDs
 function generateSequentialId(prefix: string, index: number): string {
   return `${prefix}${(index + 1).toString().padStart(5, "0")}`;
 }
 
-// Helper function to generate random date within range
-function randomDate(start: Date, end: Date): Date {
-  return new Date(
-    start.getTime() + Math.random() * (end.getTime() - start.getTime())
-  );
+// Helper function to get future date
+function getFutureDate(days: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+// Helper function to get past date
+function getPastDate(days: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date;
 }
 
 async function main() {
@@ -32,52 +35,43 @@ async function main() {
   // Clear existing data in correct order to avoid foreign key constraints
   console.log("🧹 Clearing existing data...");
   
-  // Clear in reverse order of dependencies
   const tablesToClear = [
-    // Start with tables that have no dependencies or are at the end of relationships
-    "ExchangeItemSerials",
+    "exchangeItemSerials",
     "ExchangesItems",
     "Exchanges",
-    "SalesReturnItemSerials",
+    "salesReturnItemSerials",
     "SalesReturnItems",
     "SalesReturn",
-    "SalesItemSerials",
+    "salesItemSerials",
     "SalesItems",
     "Sales",
-    "PurchaseReturnItemSerials",
+    "purchaseReturnItemSerials",
     "PurchasesReturnItems",
     "PurchasesReturn",
-    "PurchaseItemSerials",
+    "purchaseItemSerials",
     "PurchasesItems",
     "Purchases",
     "ProductSerials",
     "Services",
     "Expenses",
-    // Then clear Products which has dependencies on Categories and Suppliers
     "Products",
-    // Clear Customers, Suppliers, Categories
     "Customers",
     "Suppliers",
     "Categories",
-    // Clear user-related tables
     "Session",
     "Users",
-    "RolePermissions",
-    // Finally clear base tables
+    "rolePermissions",
     "Permissions",
     "Roles",
   ];
 
-  for (const table of tablesToClear) {
+  for (const modelName of tablesToClear) {
     try {
-      // Convert table name to Prisma model name (camelCase)
-      const modelName = table.charAt(0).toLowerCase() + table.slice(1);
       // @ts-ignore - Dynamic model access
       await prisma[modelName].deleteMany({});
-      console.log(`  ✅ Cleared ${table}`);
+      console.log(`  ✅ Cleared ${modelName}`);
     } catch (error: any) {
-      // If table doesn't exist or has constraints, skip and continue
-      console.log(`  ⏭️  Skipped ${table}: ${error.message}`);
+      console.log(`  ⏭️  Skipped ${modelName}: ${error.message}`);
     }
   }
 
@@ -107,13 +101,13 @@ async function main() {
     { name: "settings_manage", description: "Manage system settings" },
   ];
 
+  const createdPermissions = [];
   for (const permission of permissionsData) {
     try {
-      await prisma.permissions.upsert({
-        where: { name: permission.name },
-        update: permission,
-        create: permission,
+      const perm = await prisma.permissions.create({
+        data: permission,
       });
+      createdPermissions.push(perm);
     } catch (error) {
       console.log(`Error creating permission ${permission.name}:`, error);
     }
@@ -136,10 +130,10 @@ async function main() {
   const createdRoles = [];
   for (let i = 0; i < rolesData.length; i++) {
     try {
-      const role = await prisma.roles.upsert({
-        where: { name: rolesData[i].name },
-        update: rolesData[i],
-        create: rolesData[i],
+      const role = await prisma.roles.create({
+        data: {
+          ...rolesData[i],
+        },
       });
       createdRoles.push(role);
     } catch (error) {
@@ -148,27 +142,13 @@ async function main() {
   }
 
   console.log("🔗 Assigning permissions to roles...");
-  // Assign all permissions to Super Admin
-  const allPermissions = await prisma.permissions.findMany();
   const superAdminRole = createdRoles.find((r) => r.name === "Super Admin");
   
   if (superAdminRole) {
-    for (const permission of allPermissions) {
+    for (const permission of createdPermissions) {
       try {
-        await prisma.rolePermissions.upsert({
-          where: {
-            role_id_permission_id: {
-              role_id: superAdminRole.id,
-              permission_id: permission.id,
-            },
-          },
-          update: {
-            can_view: true,
-            can_create: true,
-            can_edit: true,
-            can_delete: true,
-          },
-          create: {
+        await prisma.rolePermissions.create({
+          data: {
             role_id: superAdminRole.id,
             permission_id: permission.id,
             can_view: true,
@@ -254,17 +234,8 @@ async function main() {
     }
 
     try {
-      const user = await prisma.users.upsert({
-        where: { email: userData.email },
-        update: {
-          name: userData.name,
-          password: await bcrypt.hash(userData.password, 10),
-          role_id: role.id,
-          phone: userData.phone,
-          address: userData.address,
-          status: Status.Active,
-        },
-        create: {
+      const user = await prisma.users.create({
+        data: {
           userId: generateSequentialId("U", i),
           name: userData.name,
           email: userData.email,
@@ -304,10 +275,10 @@ async function main() {
   const createdCategories = [];
   for (let i = 0; i < categoriesData.length; i++) {
     try {
-      const category = await prisma.categories.upsert({
-        where: { name: categoriesData[i].name },
-        update: categoriesData[i],
-        create: categoriesData[i],
+      const category = await prisma.categories.create({
+        data: {
+          name: categoriesData[i].name,
+        },
       });
       createdCategories.push(category);
     } catch (error) {
@@ -386,7 +357,10 @@ async function main() {
       const customer = await prisma.customers.create({
         data: {
           custId: generateSequentialId("CUST", i),
-          ...customersData[i],
+          name: customersData[i].name,
+          email: customersData[i].email,
+          phone: customersData[i].phone,
+          address: customersData[i].address,
         },
       });
       createdCustomers.push(customer);
@@ -397,91 +371,86 @@ async function main() {
 
   console.log("📦 Creating products...");
   const productsData = [
-    // Laptops
+    // Laptops - New
     {
       name: "Dell XPS 13 Laptop",
       specification: '13.4" FHD+ (1920x1200), Intel Core i7-1360P, 16GB LPDDR5, 512GB SSD',
       description: "Premium ultrabook with InfinityEdge display",
-      quantity: 25,
-      purchasePrice: decimal(899.99),
-      wholesalePrice: decimal(1099.99),
-      retailPrice: decimal(1299.99),
+      quantity: 8,
       useIndividualSerials: true,
-      productType: ProductType.New,
       status: ProductStatus.Active,
       category: "Laptops & Notebooks",
       supplier: "TechDistro Inc.",
+      serials: [
+        { serial: "DX131001", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "DX131002", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "DX131003", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "DX131004", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "DX131005", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "DX131006", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "DX131007", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "DX131008", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+      ]
     },
+    // Laptops - Pre-owned
     {
-      name: 'Apple MacBook Pro 14"',
-      specification: "Apple M3 Pro, 18GB Unified Memory, 512GB SSD, Liquid Retina XDR",
-      description: "Professional-grade laptop for creatives",
-      quantity: 18,
-      purchasePrice: decimal(1499.99),
-      wholesalePrice: decimal(1799.99),
-      retailPrice: decimal(1999.99),
+      name: "Apple MacBook Pro 14\" (Refurbished)",
+      specification: "Apple M1 Pro, 16GB Unified Memory, 512GB SSD, Liquid Retina XDR",
+      description: "Refurbished professional-grade laptop",
+      quantity: 3,
       useIndividualSerials: true,
-      productType: ProductType.New,
       status: ProductStatus.Active,
       category: "Laptops & Notebooks",
       supplier: "TechDistro Inc.",
+      serials: [
+        { serial: "MBP14R01", warranty: Warranty.No, purchasePrice: 1200, wholesalePrice: 1400, retailPrice: 1600, productType: ProductType.PreOwned },
+        { serial: "MBP14R02", warranty: Warranty.Yes, purchasePrice: 1200, wholesalePrice: 1400, retailPrice: 1600, productType: ProductType.PreOwned },
+        { serial: "MBP14R03", warranty: Warranty.No, purchasePrice: 1200, wholesalePrice: 1400, retailPrice: 1600, productType: ProductType.PreOwned },
+      ]
     },
-    // Smartphones
+    // Smartphones - New
     {
       name: "iPhone 15 Pro",
       specification: '6.1" Super Retina XDR, A17 Pro, 256GB, Titanium',
       description: "Latest iPhone with advanced camera system",
-      quantity: 30,
-      purchasePrice: decimal(899.99),
-      wholesalePrice: decimal(1099.99),
-      retailPrice: decimal(1299.99),
+      quantity: 10,
       useIndividualSerials: true,
-      productType: ProductType.New,
       status: ProductStatus.Active,
       category: "Smartphones",
       supplier: "Global Electronics Ltd.",
+      serials: [
+        { serial: "IP15P001", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P002", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P003", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P004", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P005", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P006", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P007", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P008", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P009", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+        { serial: "IP15P010", warranty: Warranty.Yes, purchasePrice: 900, wholesalePrice: 1100, retailPrice: 1300, productType: ProductType.New },
+      ]
     },
+    // Desktop Computers - No serials
     {
-      name: "Samsung Galaxy S24 Ultra",
-      specification: '6.8" Dynamic AMOLED, Snapdragon 8 Gen 3, 256GB, S Pen',
-      description: "Premium Android smartphone with S Pen",
-      quantity: 22,
-      purchasePrice: decimal(849.99),
-      wholesalePrice: decimal(1049.99),
-      retailPrice: decimal(1249.99),
-      useIndividualSerials: true,
-      productType: ProductType.New,
-      status: ProductStatus.Active,
-      category: "Smartphones",
-      supplier: "Global Electronics Ltd.",
-    },
-    // Accessories
-    {
-      name: "Logitech MX Master 3S Mouse",
-      specification: "Wireless, Ergonomic, Darkfield 4000DPI, MagSpeed Scrolling",
-      description: "Premium wireless mouse for productivity",
-      quantity: 35,
-      purchasePrice: decimal(59.99),
-      wholesalePrice: decimal(79.99),
-      retailPrice: decimal(99.99),
+      name: "Dell OptiPlex Desktop",
+      specification: "Intel Core i5, 8GB RAM, 256GB SSD, Windows 11 Pro",
+      description: "Business desktop computer",
+      quantity: 15,
       useIndividualSerials: false,
-      productType: ProductType.New,
       status: ProductStatus.Active,
-      category: "Computer Accessories",
+      category: "Desktop Computers",
       supplier: "TechDistro Inc.",
     },
+    // Computer Accessories - No serials
     {
-      name: "Samsung 990 PRO 2TB NVMe SSD",
-      specification: "PCIe 4.0, M.2 2280, Read: 7450MB/s, Write: 6900MB/s",
-      description: "High-performance NVMe SSD for gaming and creative work",
-      quantity: 40,
-      purchasePrice: decimal(129.99),
-      wholesalePrice: decimal(169.99),
-      retailPrice: decimal(199.99),
+      name: "Logitech MX Master 3S Mouse",
+      specification: "Wireless, Darkfield 8000 DPI, USB-C, 70 days battery",
+      description: "Advanced wireless mouse for productivity",
+      quantity: 25,
       useIndividualSerials: false,
-      productType: ProductType.New,
       status: ProductStatus.Active,
-      category: "Storage Devices",
+      category: "Computer Accessories",
       supplier: "Premium Components Corp.",
     },
   ];
@@ -491,7 +460,7 @@ async function main() {
     const productData = productsData[i];
     const category = createdCategories.find((c) => c.name === productData.category);
     const supplier = createdSuppliers.find((s) => s.name === productData.supplier);
-    const creator = createdUsers[0]; // Use first user as creator
+    const creator = createdUsers[0];
 
     if (!category) {
       console.log(`Category "${productData.category}" not found for product "${productData.name}"`);
@@ -506,256 +475,584 @@ async function main() {
           specification: productData.specification,
           description: productData.description,
           quantity: productData.quantity,
-          purchasePrice: productData.purchasePrice,
-          wholesalePrice: productData.wholesalePrice,
-          retailPrice: productData.retailPrice,
           useIndividualSerials: productData.useIndividualSerials,
-          productType: productData.productType,
           status: productData.status,
           category_id: category.id,
-          supplier_id: supplier?.id,
           created_by: creator.id,
-          updated_by: creator.id,
         },
       });
       createdProducts.push(product);
-      console.log(`  Created product: ${product.name}`);
+      console.log(`  Created product: ${product.name} (Quantity: ${product.quantity})`);
+      
+      if (productData.useIndividualSerials && productData.serials && productData.serials.length > 0) {
+        for (const serialData of productData.serials) {
+          await prisma.productSerials.create({
+            data: {
+              serial: serialData.serial,
+              product_id: product.id,
+              status: SerialStatus.Available,
+              warranty: serialData.warranty,
+              purchasePrice: serialData.purchasePrice,
+              wholesalePrice: serialData.wholesalePrice,
+              retailPrice: serialData.retailPrice,
+              productType: serialData.productType,
+              supplier_id: supplier?.id,
+            },
+          });
+        }
+        console.log(`    Created ${productData.serials.length} serials`);
+      }
     } catch (error) {
       console.log(`Error creating product ${productData.name}:`, error);
     }
   }
 
-  console.log("🏷️ Creating product serials...");
-  for (const product of createdProducts) {
-    if (product.useIndividualSerials) {
-      const serialsData = [];
-      const numSerials = Math.min(product.quantity, 5); // Create up to 5 serials per product
-
-      for (let i = 1; i <= numSerials; i++) {
-        const prefix = product.name.substring(0, 3).toUpperCase().replace(/\s/g, "");
-        serialsData.push({
-          serial: `${prefix}${product.id.toString().padStart(3, "0")}${i
-            .toString()
-            .padStart(3, "0")}`,
-          product_id: product.id,
-          status: i <= 2 ? SerialStatus.Available : SerialStatus.Sold, // Mark some as sold
-          warranty: Math.random() > 0.3 ? Warranty.Yes : Warranty.No,
-        });
-      }
-
-      try {
-        await prisma.productSerials.createMany({
-          data: serialsData,
-        });
-        console.log(`  Created ${numSerials} serials for ${product.name}`);
-      } catch (error) {
-        console.log(`Error creating serials for ${product.name}:`, error);
-      }
-    }
-  }
-
   console.log("💰 Creating purchases...");
   const createdPurchases = [];
-  for (let i = 0; i < 3; i++) {
-    const supplier = createdSuppliers[Math.floor(Math.random() * createdSuppliers.length)];
-    const user = createdUsers.find((u) => u.email.includes("purchase")) || createdUsers[0];
-
-    try {
-      const purchase = await prisma.purchases.create({
-        data: {
-          purchaseNo: generateSequentialId("PUR", i),
-          totalAmount: decimal(0), // Will update after items
-          totalPaid: decimal(0),
-          dueDate: new Date("2024-12-31"),
-          note: `Purchase order ${i + 1} - ${supplier.name}`,
-          supplier_id: supplier.id,
-          user_id: user.id,
-        },
+  
+  const supplier1 = createdSuppliers.find(s => s.name === "TechDistro Inc.");
+  const purchaseUser = createdUsers.find(u => u.email.includes("purchase")) || createdUsers[4];
+  
+  // Purchase 1: Dell XPS Laptops
+  try {
+    const purchase1 = await prisma.purchases.create({
+      data: {
+        purchaseNo: generateSequentialId("PUR", 0),
+        totalAmount: 7200,
+        totalPaid: 7200,
+        dueDate: getPastDate(0),
+        note: "Monthly laptop stock order",
+        supplier_id: supplier1!.id,
+        user_id: purchaseUser.id,
+      },
+    });
+    createdPurchases.push(purchase1);
+    
+    const dellProduct = createdProducts.find(p => p.name === "Dell XPS 13 Laptop");
+    if (dellProduct) {
+      const dellSerials = await prisma.productSerials.findMany({
+        where: { product_id: dellProduct.id, status: SerialStatus.Available },
+        take: 8,
       });
-      createdPurchases.push(purchase);
-    } catch (error) {
-      console.log(`Error creating purchase ${i}:`, error);
-    }
-  }
-
-  console.log("📝 Creating purchase items...");
-  for (const purchase of createdPurchases) {
-    const numItems = Math.floor(Math.random() * 2) + 1; // 1-2 items per purchase
-    let purchaseTotal = 0;
-
-    for (let i = 0; i < numItems; i++) {
-      const product = createdProducts[Math.floor(Math.random() * createdProducts.length)];
-      const quantity = Math.floor(Math.random() * 2) + 1;
-      const unitPrice = product.purchasePrice;
-
-      try {
-        const purchaseItem = await prisma.purchasesItems.create({
+      
+      if (dellSerials.length > 0) {
+        const purchaseItem1 = await prisma.purchasesItems.create({
           data: {
-            quantity,
-            unitPrice,
-            purchase_id: purchase.id,
-            product_id: product.id,
+            quantity: dellSerials.length,
+            unitPrice: dellSerials[0].purchasePrice,
+            purchase_id: purchase1.id,
+            product_id: dellProduct.id,
           },
         });
-
-        purchaseTotal += unitPrice.toNumber() * quantity;
-
-        // Update product quantity
-        await prisma.products.update({
-          where: { id: product.id },
-          data: { quantity: { increment: quantity } },
-        });
-
-        // Create purchase item serials if applicable
-        if (product.useIndividualSerials) {
-          const serials = await prisma.productSerials.findMany({
-            where: {
-              product_id: product.id,
-              status: SerialStatus.Available,
+        
+        for (const serial of dellSerials) {
+          await prisma.purchaseItemSerials.create({
+            data: {
+              purchaseItem_id: purchaseItem1.id,
+              serial_id: serial.id,
+              purchasedPrice: serial.purchasePrice,
+              purchasedAt: new Date(),
             },
-            take: quantity,
           });
-
-          for (const serial of serials) {
-            try {
-              await prisma.purchaseItemSerials.create({
-                data: {
-                  purchaseItem_id: purchaseItem.id,
-                  serial_id: serial.id,
-                },
-              });
-
-              // Update serial status to Available (if it was sold before)
-              await prisma.productSerials.update({
-                where: { id: serial.id },
-                data: { status: SerialStatus.Available },
-              });
-            } catch (error) {
-              console.log("Error creating purchase item serial:", error);
-            }
-          }
         }
-      } catch (error) {
-        console.log("Error creating purchase item:", error);
       }
     }
+    
+    console.log(`  Created Purchase #${purchase1.purchaseNo} with 8 Dell XPS Laptops`);
+  } catch (error) {
+    console.log("Error creating purchase 1:", error);
+  }
 
-    // Update purchase total
-    try {
-      await prisma.purchases.update({
-        where: { id: purchase.id },
-        data: {
-          totalAmount: decimal(purchaseTotal),
-          totalPaid: decimal(purchaseTotal),
-        },
+  // Purchase 2: MacBook Pro Refurbished
+  try {
+    const purchase2 = await prisma.purchases.create({
+      data: {
+        purchaseNo: generateSequentialId("PUR", 1),
+        totalAmount: 3600,
+        totalPaid: 3600,
+        dueDate: getPastDate(-5),
+        note: "Refurbished laptops order",
+        supplier_id: supplier1!.id,
+        user_id: purchaseUser.id,
+      },
+    });
+    createdPurchases.push(purchase2);
+    
+    const macbookProduct = createdProducts.find(p => p.name === "Apple MacBook Pro 14\" (Refurbished)");
+    if (macbookProduct) {
+      const macbookSerials = await prisma.productSerials.findMany({
+        where: { product_id: macbookProduct.id, status: SerialStatus.Available },
+        take: 3,
       });
-    } catch (error) {
-      console.log("Error updating purchase total:", error);
+      
+      if (macbookSerials.length > 0) {
+        const purchaseItem2 = await prisma.purchasesItems.create({
+          data: {
+            quantity: macbookSerials.length,
+            unitPrice: macbookSerials[0].purchasePrice,
+            purchase_id: purchase2.id,
+            product_id: macbookProduct.id,
+          },
+        });
+        
+        for (const serial of macbookSerials) {
+          await prisma.purchaseItemSerials.create({
+            data: {
+              purchaseItem_id: purchaseItem2.id,
+              serial_id: serial.id,
+              purchasedPrice: serial.purchasePrice,
+              purchasedAt: new Date(),
+            },
+          });
+        }
+      }
     }
+    
+    console.log(`  Created Purchase #${purchase2.purchaseNo} with 3 MacBook Pro (Refurbished)`);
+  } catch (error) {
+    console.log("Error creating purchase 2:", error);
+  }
+
+  // Purchase 3: iPhone 15 Pro
+  try {
+    const purchase3 = await prisma.purchases.create({
+      data: {
+        purchaseNo: generateSequentialId("PUR", 2),
+        totalAmount: 9000,
+        totalPaid: 9000,
+        dueDate: getFutureDate(15),
+        note: "New smartphone stock",
+        supplier_id: createdSuppliers[1].id,
+        user_id: purchaseUser.id,
+      },
+    });
+    createdPurchases.push(purchase3);
+    
+    const iphoneProduct = createdProducts.find(p => p.name === "iPhone 15 Pro");
+    if (iphoneProduct) {
+      const iphoneSerials = await prisma.productSerials.findMany({
+        where: { product_id: iphoneProduct.id, status: SerialStatus.Available },
+        take: 10,
+      });
+      
+      if (iphoneSerials.length > 0) {
+        const purchaseItem3 = await prisma.purchasesItems.create({
+          data: {
+            quantity: iphoneSerials.length,
+            unitPrice: iphoneSerials[0].purchasePrice,
+            purchase_id: purchase3.id,
+            product_id: iphoneProduct.id,
+          },
+        });
+        
+        for (const serial of iphoneSerials) {
+          await prisma.purchaseItemSerials.create({
+            data: {
+              purchaseItem_id: purchaseItem3.id,
+              serial_id: serial.id,
+              purchasedPrice: serial.purchasePrice,
+              purchasedAt: new Date(),
+            },
+          });
+        }
+      }
+    }
+    
+    console.log(`  Created Purchase #${purchase3.purchaseNo} with 10 iPhone 15 Pro`);
+  } catch (error) {
+    console.log("Error creating purchase 3:", error);
   }
 
   console.log("🛒 Creating sales...");
   const createdSales = [];
-  for (let i = 0; i < 5; i++) {
-    const customer = createdCustomers[Math.floor(Math.random() * createdCustomers.length)];
-    const user = createdUsers.find((u) => u.email.includes("sales")) || createdUsers[0];
-
-    try {
-      const sale = await prisma.sales.create({
-        data: {
-          saleNo: generateSequentialId("SAL", i),
-          totalAmount: decimal(0), // Will update after items
-          totalPaid: decimal(0),
-          totaldiscount: decimal(Math.random() * 20),
-          dueDate: new Date("2024-12-31"),
-          status: Math.random() > 0.2 ? "Completed" : "Pending",
-          customer_id: customer.id,
-          user_id: user.id,
+  const salesUser = createdUsers.find(u => u.email.includes("sales")) || createdUsers[2];
+  
+  // Sale 1: iPhone to ABC Corporation
+  try {
+    const sale1 = await prisma.sales.create({
+      data: {
+        saleNo: generateSequentialId("SAL", 0),
+        totalAmount: 1250,
+        totalPaid: 1250,
+        totaldiscount: 50,
+        dueDate: getFutureDate(7),
+        status: "Active",
+        customer_id: createdCustomers[0].id,
+        user_id: salesUser.id,
+      },
+    });
+    createdSales.push(sale1);
+    
+    const iphoneProduct = createdProducts.find(p => p.name === "iPhone 15 Pro");
+    if (iphoneProduct) {
+      const iphoneSerial = await prisma.productSerials.findFirst({
+        where: { 
+          product_id: iphoneProduct.id, 
+          status: SerialStatus.Available,
         },
       });
-      createdSales.push(sale);
-    } catch (error) {
-      console.log(`Error creating sale ${i}:`, error);
-    }
-  }
-
-  console.log("📝 Creating sale items...");
-  for (const sale of createdSales) {
-    const numItems = Math.floor(Math.random() * 2) + 1; // 1-2 items per sale
-    let saleTotal = 0;
-
-    for (let i = 0; i < numItems; i++) {
-      const product = createdProducts[Math.floor(Math.random() * createdProducts.length)];
-      const quantity = 1;
-      const unitPrice = product.retailPrice;
-      const discount = Math.random() > 0.7 ? decimal(Math.random() * 10) : null;
-
-      try {
-        const saleItem = await prisma.salesItems.create({
+      
+      if (iphoneSerial) {
+        const saleItem1 = await prisma.salesItems.create({
           data: {
-            quantity,
-            unitPrice,
-            discount,
-            sales_id: sale.id,
-            product_id: product.id,
+            quantity: 1,
+            unitPrice: 1300,
+            discount: 50,
+            sales_id: sale1.id,
+            product_id: iphoneProduct.id,
           },
         });
-
-        const itemTotal = unitPrice.toNumber() * quantity - (discount?.toNumber() || 0);
-        saleTotal += itemTotal;
-
-        // Update product quantity
-        await prisma.products.update({
-          where: { id: product.id },
-          data: { quantity: { decrement: quantity } },
+        
+        await prisma.salesItemSerials.create({
+          data: {
+            salesItem_id: saleItem1.id,
+            serial_id: iphoneSerial.id,
+            soldPrice: 1250,
+            soldAt: new Date(),
+          },
         });
-
-        // Create sale item serials if applicable
-        if (product.useIndividualSerials) {
-          const serials = await prisma.productSerials.findMany({
-            where: {
-              product_id: product.id,
-              status: SerialStatus.Available,
-            },
-            take: quantity,
-          });
-
-          for (const serial of serials) {
-            try {
-              await prisma.salesItemSerials.create({
-                data: {
-                  salesItem_id: saleItem.id,
-                  serial_id: serial.id,
-                },
-              });
-
-              // Update serial status to Sold
-              await prisma.productSerials.update({
-                where: { id: serial.id },
-                data: { status: SerialStatus.Sold },
-              });
-            } catch (error) {
-              console.log("Error creating sale item serial:", error);
-            }
-          }
-        }
-      } catch (error) {
-        console.log("Error creating sale item:", error);
+        
+        await prisma.productSerials.update({
+          where: { id: iphoneSerial.id },
+          data: { status: SerialStatus.Sold },
+        });
+        
+        await prisma.products.update({
+          where: { id: iphoneProduct.id },
+          data: { quantity: { decrement: 1 } },
+        });
       }
     }
+    
+    console.log(`  Created Sale #${sale1.saleNo} with 1 iPhone 15 Pro`);
+  } catch (error) {
+    console.log("Error creating sale 1:", error);
+  }
 
-    // Update sale total
-    try {
-      await prisma.sales.update({
-        where: { id: sale.id },
+  // Sale 2: Two Dell XPS Laptops to XYZ Enterprises
+  try {
+    const sale2 = await prisma.sales.create({
+      data: {
+        saleNo: generateSequentialId("SAL", 1),
+        totalAmount: 2600,
+        totalPaid: 2600,
+        totaldiscount: 0,
+        dueDate: getFutureDate(25),
+        status: "Active",
+        customer_id: createdCustomers[1].id,
+        user_id: salesUser.id,
+      },
+    });
+    createdSales.push(sale2);
+    
+    const dellProduct = createdProducts.find(p => p.name === "Dell XPS 13 Laptop");
+    if (dellProduct) {
+      const dellSerials = await prisma.productSerials.findMany({
+        where: { 
+          product_id: dellProduct.id, 
+          status: SerialStatus.Available,
+        },
+        take: 2,
+      });
+      
+      if (dellSerials.length === 2) {
+        const saleItem2 = await prisma.salesItems.create({
+          data: {
+            quantity: 2,
+            unitPrice: 1300,
+            discount: 0,
+            sales_id: sale2.id,
+            product_id: dellProduct.id,
+          },
+        });
+        
+        for (const serial of dellSerials) {
+          await prisma.salesItemSerials.create({
+            data: {
+              salesItem_id: saleItem2.id,
+              serial_id: serial.id,
+              soldPrice: 1300,
+              soldAt: new Date(),
+            },
+          });
+          
+          await prisma.productSerials.update({
+            where: { id: serial.id },
+            data: { status: SerialStatus.Sold },
+          });
+        }
+        
+        await prisma.products.update({
+          where: { id: dellProduct.id },
+          data: { quantity: { decrement: 2 } },
+        });
+      }
+    }
+    
+    console.log(`  Created Sale #${sale2.saleNo} with 2 Dell XPS Laptops`);
+  } catch (error) {
+    console.log("Error creating sale 2:", error);
+  }
+
+  // Sale 3: Non-serialized products (Dell Desktop and Mouse)
+  try {
+    const sale3 = await prisma.sales.create({
+      data: {
+        saleNo: generateSequentialId("SAL", 2),
+        totalAmount: 850,
+        totalPaid: 850,
+        totaldiscount: 50,
+        dueDate: getFutureDate(30),
+        status: "Active",
+        customer_id: createdCustomers[2].id,
+        user_id: salesUser.id,
+      },
+    });
+    createdSales.push(sale3);
+    
+    const desktopProduct = createdProducts.find(p => p.name === "Dell OptiPlex Desktop");
+    const mouseProduct = createdProducts.find(p => p.name === "Logitech MX Master 3S Mouse");
+    
+    if (desktopProduct) {
+      const saleItem3 = await prisma.salesItems.create({
         data: {
-          totalAmount: decimal(saleTotal),
-          totalPaid: decimal(saleTotal * 0.8),
+          quantity: 1,
+          unitPrice: 800,
+          discount: 0,
+          sales_id: sale3.id,
+          product_id: desktopProduct.id,
         },
       });
-    } catch (error) {
-      console.log("Error updating sale total:", error);
+      
+      await prisma.products.update({
+        where: { id: desktopProduct.id },
+        data: { quantity: { decrement: 1 } },
+      });
     }
+    
+    if (mouseProduct) {
+      const saleItem4 = await prisma.salesItems.create({
+        data: {
+          quantity: 2,
+          unitPrice: 50,
+          discount: 50,
+          sales_id: sale3.id,
+          product_id: mouseProduct.id,
+        },
+      });
+      
+      await prisma.products.update({
+        where: { id: mouseProduct.id },
+        data: { quantity: { decrement: 2 } },
+      });
+    }
+    
+    console.log(`  Created Sale #${sale3.saleNo} with non-serialized products`);
+  } catch (error) {
+    console.log("Error creating sale 3:", error);
+  }
+
+  console.log("📝 Creating purchase returns...");
+  // Create a purchase return for one defective MacBook
+  try {
+    const macbookProduct = createdProducts.find(p => p.name === "Apple MacBook Pro 14\" (Refurbished)");
+    const macbookSerial = await prisma.productSerials.findFirst({
+      where: { 
+        product_id: macbookProduct?.id, 
+        status: SerialStatus.Available,
+        warranty: Warranty.No,
+      },
+    });
+    
+    if (macbookProduct && macbookSerial) {
+      const purchaseReturn = await prisma.purchasesReturn.create({
+        data: {
+          returnNo: generateSequentialId("PRET", 0),
+          totalPaid: 1200,
+          note: "Defective unit - screen flickering",
+          purchase_id: createdPurchases[1].id,
+          user_id: purchaseUser.id,
+          supplier_id: supplier1!.id,
+        },
+      });
+      
+      const purchaseReturnItem = await prisma.purchasesReturnItems.create({
+        data: {
+          quantity: 1,
+          unitPrice: 1200,
+          products_id: macbookProduct.id,
+          purchaseReturn_id: purchaseReturn.id,
+        },
+      });
+      
+      await prisma.purchaseReturnItemSerials.create({
+        data: {
+          purchaseReturnItem_id: purchaseReturnItem.id,
+          serial_id: macbookSerial.id,
+          returnedPrice: 1200,
+          returnedAt: new Date(),
+        },
+      });
+      
+      await prisma.productSerials.update({
+        where: { id: macbookSerial.id },
+        data: { status: SerialStatus.Returned },
+      });
+      
+      await prisma.products.update({
+        where: { id: macbookProduct.id },
+        data: { quantity: { decrement: 1 } },
+      });
+      
+      console.log(`  Created Purchase Return #${purchaseReturn.returnNo} for defective MacBook`);
+    }
+  } catch (error) {
+    console.log("Error creating purchase return:", error);
+  }
+
+  console.log("🔄 Creating sales returns...");
+  // Create a sales return for the iPhone sold earlier
+  try {
+    const iphoneProduct = createdProducts.find(p => p.name === "iPhone 15 Pro");
+    const soldiPhoneSerial = await prisma.productSerials.findFirst({
+      where: { 
+        product_id: iphoneProduct?.id, 
+        status: SerialStatus.Sold,
+      },
+    });
+    
+    if (iphoneProduct && soldiPhoneSerial) {
+      const salesReturn = await prisma.salesReturn.create({
+        data: {
+          returnNo: generateSequentialId("SRET", 0),
+          total_payback: 1250,
+          note: "Customer changed mind - within return period",
+          sales_id: createdSales[0].id,
+          user_id: salesUser.id,
+          customer_id: createdCustomers[0].id,
+        },
+      });
+      
+      const salesReturnItem = await prisma.salesReturnItems.create({
+        data: {
+          quantity: 1,
+          unitPrice: 1250,
+          product_id: iphoneProduct.id,
+          salesReturn_id: salesReturn.id,
+          productSerialsId: soldiPhoneSerial.id,
+        },
+      });
+      
+      await prisma.salesReturnItemSerials.create({
+        data: {
+          salesReturnItem_id: salesReturnItem.id,
+          serial_id: soldiPhoneSerial.id,
+          returnedPrice: 1250,
+          returnedAt: new Date(),
+        },
+      });
+      
+      await prisma.productSerials.update({
+        where: { id: soldiPhoneSerial.id },
+        data: { 
+          status: SerialStatus.Available,
+          productType: ProductType.PreOwned,
+        },
+      });
+      
+      await prisma.products.update({
+        where: { id: iphoneProduct.id },
+        data: { quantity: { increment: 1 } },
+      });
+      
+      console.log(`  Created Sales Return #${salesReturn.returnNo} for iPhone`);
+    }
+  } catch (error) {
+    console.log("Error creating sales return:", error);
+  }
+
+  console.log("🔄 Creating exchanges...");
+  // Create an exchange (MacBook for Dell laptop)
+  try {
+    const dellProduct = createdProducts.find(p => p.name === "Dell XPS 13 Laptop");
+    const macbookProduct = createdProducts.find(p => p.name === "Apple MacBook Pro 14\" (Refurbished)");
+    
+    const soldDellSerial = await prisma.productSerials.findFirst({
+      where: { 
+        product_id: dellProduct?.id, 
+        status: SerialStatus.Sold,
+      },
+    });
+    
+    const availableMacbookSerial = await prisma.productSerials.findFirst({
+      where: { 
+        product_id: macbookProduct?.id, 
+        status: SerialStatus.Available,
+        warranty: Warranty.Yes,
+      },
+    });
+    
+    if (dellProduct && macbookProduct && soldDellSerial && availableMacbookSerial) {
+      const exchange = await prisma.exchanges.create({
+        data: {
+          exchangeNo: generateSequentialId("EXC", 0),
+          totalPaid: 300, // Customer pays difference
+          totalPayback: 0,
+          note: "Customer wanted more powerful laptop",
+          sales_id: createdSales[1].id, // Reference to the sale with Dell laptops
+          user_id: salesUser.id,
+          customer_id: createdCustomers[1].id,
+        },
+      });
+      
+      const exchangeItem = await prisma.exchangesItems.create({
+        data: {
+          quantity: 1,
+          unitPrice: 300,
+          note: "Exchange Dell XPS for MacBook Pro",
+          oldProduct_id: dellProduct.id,
+          newProduct_id: macbookProduct.id,
+          exchangeId: exchange.id,
+        },
+      });
+      
+      await prisma.exchangeItemSerials.create({
+        data: {
+          exchangeItem_id: exchangeItem.id,
+          serial_id_old: soldDellSerial.id,
+          serial_id_new: availableMacbookSerial.id,
+          exchangePrice: 300,
+          exchangedAt: new Date(),
+        },
+      });
+      
+      // Update old serial status
+      await prisma.productSerials.update({
+        where: { id: soldDellSerial.id },
+        data: { status: SerialStatus.Exchanged },
+      });
+      
+      // Update new serial status
+      await prisma.productSerials.update({
+        where: { id: availableMacbookSerial.id },
+        data: { status: SerialStatus.Sold },
+      });
+      
+      // Update product quantities
+      await prisma.products.update({
+        where: { id: dellProduct.id },
+        data: { quantity: { increment: 1 } }, // Returned Dell becomes available
+      });
+      
+      await prisma.products.update({
+        where: { id: macbookProduct.id },
+        data: { quantity: { decrement: 1 } }, // MacBook is sold
+      });
+      
+      console.log(`  Created Exchange #${exchange.exchangeNo} (Dell XPS ↔ MacBook Pro)`);
+    }
+  } catch (error) {
+    console.log("Error creating exchange:", error);
   }
 
   console.log("🔧 Creating services...");
@@ -763,16 +1060,16 @@ async function main() {
     {
       serviceProductName: "MacBook Pro Screen Repair",
       serviceDescription: "Replace cracked screen with genuine Apple part",
-      serviceCost: decimal(349.99),
-      serviceStatus: "Completed",
+      serviceCost: 350,
+      assignedTechnician: "Tom Harris",
       customer: "ABC Corporation",
       user: "Tom Harris",
     },
     {
       serviceProductName: "Laptop Battery Replacement",
       serviceDescription: "Replace old battery with new OEM battery",
-      serviceCost: decimal(129.99),
-      serviceStatus: "In Progress",
+      serviceCost: 130,
+      assignedTechnician: "Tom Harris",
       customer: "XYZ Enterprises",
       user: "Tom Harris",
     },
@@ -793,9 +1090,9 @@ async function main() {
         data: {
           serviceNo: generateSequentialId("SVC", i),
           serviceProductName: serviceData.serviceProductName,
-          serviceDescription: serviceData.serviceDescription,
+          serviceDescription: `${serviceData.serviceDescription} (Technician: ${serviceData.assignedTechnician})`,
           serviceCost: serviceData.serviceCost,
-          serviceStatus: serviceData.serviceStatus,
+          serviceStatus: "Active",
           customer_id: customer.id,
           user_id: user?.id,
         },
@@ -809,15 +1106,21 @@ async function main() {
   const expensesData = [
     {
       title: "Office Rent - January 2024",
-      amount: decimal(2500.0),
+      amount: 2500,
       description: "Monthly office rent payment",
       user: "admin@example.com",
     },
     {
       title: "Internet & Phone Bills",
-      amount: decimal(189.99),
+      amount: 190,
       description: "Monthly internet and phone service",
       user: "admin@example.com",
+    },
+    {
+      title: "Shipping Supplies",
+      amount: 350,
+      description: "Bubble wrap, boxes, tape",
+      user: "purchase@example.com",
     },
   ];
 
@@ -853,16 +1156,58 @@ async function main() {
   console.log(`  ✅ Suppliers: ${createdSuppliers.length}`);
   console.log(`  ✅ Customers: ${createdCustomers.length}`);
   console.log(`  ✅ Products: ${createdProducts.length}`);
+  
+  const totalSerials = await prisma.productSerials.count();
+  console.log(`  ✅ Product Serials: ${totalSerials}`);
+  
   console.log(`  ✅ Purchases: ${createdPurchases.length}`);
+  console.log(`  ✅ Purchase Item Serials: ${await prisma.purchaseItemSerials.count()}`);
   console.log(`  ✅ Sales: ${createdSales.length}`);
+  console.log(`  ✅ Sales Item Serials: ${await prisma.salesItemSerials.count()}`);
+  
+  const purchaseReturns = await prisma.purchasesReturn.count();
+  console.log(`  ✅ Purchase Returns: ${purchaseReturns}`);
+  
+  const salesReturns = await prisma.salesReturn.count();
+  console.log(`  ✅ Sales Returns: ${salesReturns}`);
+  
+  const exchanges = await prisma.exchanges.count();
+  console.log(`  ✅ Exchanges: ${exchanges}`);
+  
+  const services = await prisma.services.count();
+  console.log(`  ✅ Services: ${services}`);
+  
+  const expenses = await prisma.expenses.count();
+  console.log(`  ✅ Expenses: ${expenses}`);
+  
+  // Show inventory summary
+  console.log("\n📦 Inventory Summary:");
+  const products = await prisma.products.findMany({
+    include: {
+      productSerials: {
+        where: { status: SerialStatus.Available },
+      },
+    },
+  });
+  
+  for (const product of products) {
+    const serialCount = product.productSerials.length;
+    const totalCount = product.useIndividualSerials ? serialCount : product.quantity;
+    console.log(`  ${product.name}: ${totalCount} units (${serialCount} serials available)`);
+  }
   
   console.log("\n🔑 Login Credentials:");
   console.log("   Email: admin@example.com");
   console.log("   Password: admin123");
-  console.log("\n   Email: sales@example.com");
+  console.log("   Email: sales@example.com");
   console.log("   Password: sales123");
-  console.log("\n   Email: manager@example.com");
+  console.log("   Email: manager@example.com");
   console.log("   Password: manager123");
+  console.log("   Email: purchase@example.com");
+  console.log("   Password: purchase123");
+  console.log("   Email: technician@example.com");
+  console.log("   Password: tech123");
+  console.log("\n⚠️  Note: Sales status is stored as String, not Status enum");
 }
 
 main()

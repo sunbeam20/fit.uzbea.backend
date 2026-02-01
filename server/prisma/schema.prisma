@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -118,7 +115,7 @@ model Suppliers {
 
   Purchases       Purchases[]
   PurchasesReturn PurchasesReturn[]
-  products        Products[]
+  productSerials  ProductSerials[]
 }
 
 // Categories model
@@ -137,21 +134,15 @@ model Products {
   specification        String?
   description          String?
   quantity             Int
-  purchasePrice        Decimal
-  wholesalePrice       Decimal
-  retailPrice          Decimal
   useIndividualSerials Boolean       @default(false)
-  productType          ProductType   @default(New)
   status               ProductStatus @default(Active)
   category_id          Int
-  supplier_id          Int?
-  created_by           Int? // NEW: Who created the product
-  updated_by           Int? // NEW: Who last updated the product
+  created_by           Int?
+  updated_by           Int?
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @default(now())
 
   Categories Categories? @relation(fields: [category_id], references: [id])
-  supplier   Suppliers?  @relation(fields: [supplier_id], references: [id])
   creator    Users?      @relation("ProductCreator", fields: [created_by], references: [id])
   updater    Users?      @relation("ProductUpdater", fields: [updated_by], references: [id])
 
@@ -170,21 +161,22 @@ enum ProductStatus {
   Discontinued
 }
 
-enum ProductType {
-  New
-  PreOwned
-}
-
 model ProductSerials {
-  id         Int          @id @default(autoincrement())
-  serial     String       @unique
-  product_id Int
-  status     SerialStatus @default(Available)
-  warranty   Warranty     @default(No)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id             Int          @id @default(autoincrement())
+  serial         String       @unique
+  product_id     Int
+  status         SerialStatus @default(Available)
+  warranty       Warranty     @default(No)
+  purchasePrice  Int
+  wholesalePrice Int
+  retailPrice    Int
+  productType    ProductType  @default(New)
+  supplier_id    Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   Products                  Products?                   @relation(fields: [product_id], references: [id])
+  supplier                  Suppliers?                  @relation(fields: [supplier_id], references: [id])
   SalesItemSerials          SalesItemSerials[]
   salesReturnItemSerials    SalesReturnItemSerials[]
   purchaseItemSerials       PurchaseItemSerials[]
@@ -194,13 +186,18 @@ model ProductSerials {
   exchangeItemSerialsNew    ExchangeItemSerials[]       @relation("NewProductSerials")
 }
 
+enum ProductType {
+  New
+  PreOwned
+}
+
 enum SerialStatus {
-  Available // In stock
-  Sold // Sold to customer
-  Returned // Returned by customer
-  Unavailable // Not available for sale
-  InService // Being repaired
-  Exchanged // Exchanged for another product
+  Available
+  Sold
+  Returned
+  Unavailable
+  InService
+  Exchanged
 }
 
 enum Warranty {
@@ -213,7 +210,7 @@ model Expenses {
   id          Int      @id @default(autoincrement())
   expenseNo   String   @unique
   title       String
-  amount      Decimal
+  amount      Int
   date        DateTime @default(now())
   description String?
   user_id     Int
@@ -225,17 +222,17 @@ model Expenses {
 
 // Sales and related models
 model Sales {
-  id            Int       @id @default(autoincrement())
-  saleNo        String    @unique
-  totalAmount   Decimal
-  totalPaid     Decimal
-  totaldiscount Decimal?
+  id            Int      @id @default(autoincrement())
+  saleNo        String   @unique
+  totalAmount   Int
+  totalPaid     Int
+  totaldiscount Int?
   dueDate       DateTime?
   status        String
   customer_id   Int?
   user_id       Int
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now())
 
   Customers Customers? @relation(fields: [customer_id], references: [id])
   Users     Users?     @relation(fields: [user_id], references: [id])
@@ -248,8 +245,8 @@ model Sales {
 model SalesItems {
   id         Int      @id @default(autoincrement())
   quantity   Int
-  unitPrice  Decimal
-  discount   Decimal?
+  unitPrice  Int
+  discount   Int?
   sales_id   Int
   product_id Int
 
@@ -259,18 +256,22 @@ model SalesItems {
 }
 
 model SalesItemSerials {
-  id           Int @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   salesItem_id Int
   serial_id    Int
+  soldPrice    Int
+  soldAt       DateTime @default(now())
 
   SalesItems     SalesItems     @relation(fields: [salesItem_id], references: [id])
   ProductSerials ProductSerials @relation(fields: [serial_id], references: [id])
+
+  @@unique([salesItem_id, serial_id])
 }
 
 model SalesReturn {
   id            Int      @id @default(autoincrement())
   returnNo      String   @unique
-  total_payback Decimal
+  total_payback Int
   note          String
   sales_id      Int
   user_id       Int
@@ -288,7 +289,7 @@ model SalesReturn {
 model SalesReturnItems {
   id             Int     @id @default(autoincrement())
   quantity       Int
-  unitPrice      Decimal
+  unitPrice      Int
   product_id     Int
   salesReturn_id Int
 
@@ -300,20 +301,24 @@ model SalesReturnItems {
 }
 
 model SalesReturnItemSerials {
-  id                 Int @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   salesReturnItem_id Int
   serial_id          Int
+  returnedPrice      Int
+  returnedAt         DateTime @default(now())
 
   SalesReturnItems SalesReturnItems @relation(fields: [salesReturnItem_id], references: [id])
   ProductSerials   ProductSerials   @relation(fields: [serial_id], references: [id])
+
+  @@unique([salesReturnItem_id, serial_id])
 }
 
 // Exchanges and related models
 model Exchanges {
   id           Int      @id @default(autoincrement())
   exchangeNo   String   @unique
-  totalPaid    Decimal
-  totalPayback Decimal
+  totalPaid    Int
+  totalPayback Int
   note         String
   sales_id     Int
   user_id      Int
@@ -331,9 +336,8 @@ model Exchanges {
 model ExchangesItems {
   id            Int      @id @default(autoincrement())
   quantity      Int
-  unitPrice     Decimal
+  unitPrice     Int
   note          String
-  // Product references
   oldProduct_id Int
   newProduct_id Int
   exchangeId    Int?
@@ -347,22 +351,26 @@ model ExchangesItems {
 }
 
 model ExchangeItemSerials {
-  id              Int @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   exchangeItem_id Int
   serial_id_old   Int
   serial_id_new   Int
+  exchangePrice   Int
+  exchangedAt     DateTime @default(now())
 
   ExchangesItems    ExchangesItems @relation(fields: [exchangeItem_id], references: [id])
   OldProductSerials ProductSerials @relation("OldProductSerials", fields: [serial_id_old], references: [id])
   NewProductSerials ProductSerials @relation("NewProductSerials", fields: [serial_id_new], references: [id])
+
+  @@unique([exchangeItem_id, serial_id_old, serial_id_new])
 }
 
 // Purchases and related models
 model Purchases {
   id          Int      @id @default(autoincrement())
   purchaseNo  String   @unique
-  totalAmount Decimal
-  totalPaid   Decimal
+  totalAmount Int
+  totalPaid   Int
   dueDate     DateTime
   note        String?
   supplier_id Int
@@ -380,7 +388,7 @@ model Purchases {
 model PurchasesItems {
   id          Int     @id @default(autoincrement())
   quantity    Int
-  unitPrice   Decimal
+  unitPrice   Int
   purchase_id Int
   product_id  Int
 
@@ -390,18 +398,22 @@ model PurchasesItems {
 }
 
 model PurchaseItemSerials {
-  id              Int @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   purchaseItem_id Int
   serial_id       Int
+  purchasedPrice  Int
+  purchasedAt     DateTime @default(now())
 
   PurchasesItems PurchasesItems @relation(fields: [purchaseItem_id], references: [id])
   ProductSerials ProductSerials @relation(fields: [serial_id], references: [id])
+
+  @@unique([purchaseItem_id, serial_id])
 }
 
 model PurchasesReturn {
   id          Int      @id @default(autoincrement())
   returnNo    String   @unique
-  totalPaid   Decimal
+  totalPaid   Int
   note        String
   purchase_id Int
   user_id     Int
@@ -419,7 +431,7 @@ model PurchasesReturn {
 model PurchasesReturnItems {
   id                Int     @id @default(autoincrement())
   quantity          Int
-  unitPrice         Decimal
+  unitPrice         Int
   products_id       Int
   purchaseReturn_id Int
 
@@ -429,12 +441,16 @@ model PurchasesReturnItems {
 }
 
 model PurchaseReturnItemSerials {
-  id                    Int @id @default(autoincrement())
+  id                    Int      @id @default(autoincrement())
   purchaseReturnItem_id Int
   serial_id             Int
+  returnedPrice         Int
+  returnedAt            DateTime @default(now())
 
   PurchasesReturnItems PurchasesReturnItems @relation(fields: [purchaseReturnItem_id], references: [id])
   ProductSerials       ProductSerials       @relation(fields: [serial_id], references: [id])
+
+  @@unique([purchaseReturnItem_id, serial_id])
 }
 
 // Services and related models
@@ -443,7 +459,7 @@ model Services {
   serviceNo          String   @unique
   serviceProductName String
   serviceDescription String
-  serviceCost        Decimal
+  serviceCost        Int
   serviceStatus      String
   customer_id        Int?
   user_id            Int?
