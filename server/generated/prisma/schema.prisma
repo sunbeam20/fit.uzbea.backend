@@ -118,7 +118,7 @@ model Suppliers {
 
   Purchases       Purchases[]
   PurchasesReturn PurchasesReturn[]
-  products        Products[]
+  productSerials  ProductSerials[]
 }
 
 // Categories model
@@ -137,21 +137,15 @@ model Products {
   specification        String?
   description          String?
   quantity             Int
-  purchasePrice        Decimal
-  wholesalePrice       Decimal
-  retailPrice          Decimal
   useIndividualSerials Boolean       @default(false)
-  productType          ProductType   @default(New)
   status               ProductStatus @default(Active)
   category_id          Int
-  supplier_id          Int?
   created_by           Int? // NEW: Who created the product
   updated_by           Int? // NEW: Who last updated the product
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @default(now())
 
   Categories Categories? @relation(fields: [category_id], references: [id])
-  supplier   Suppliers?  @relation(fields: [supplier_id], references: [id])
   creator    Users?      @relation("ProductCreator", fields: [created_by], references: [id])
   updater    Users?      @relation("ProductUpdater", fields: [updated_by], references: [id])
 
@@ -170,21 +164,22 @@ enum ProductStatus {
   Discontinued
 }
 
-enum ProductType {
-  New
-  PreOwned
-}
-
 model ProductSerials {
-  id         Int          @id @default(autoincrement())
-  serial     String       @unique
-  product_id Int
-  status     SerialStatus @default(Available)
-  warranty   Warranty     @default(No)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id             Int          @id @default(autoincrement())
+  serial         String       @unique
+  product_id     Int
+  status         SerialStatus @default(Available)
+  warranty       Warranty     @default(No)
+  purchasePrice  Decimal
+  wholesalePrice Decimal
+  retailPrice    Decimal
+  productType    ProductType  @default(New)
+  supplier_id    Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   Products                  Products?                   @relation(fields: [product_id], references: [id])
+  supplier                  Suppliers?                  @relation(fields: [supplier_id], references: [id])
   SalesItemSerials          SalesItemSerials[]
   salesReturnItemSerials    SalesReturnItemSerials[]
   purchaseItemSerials       PurchaseItemSerials[]
@@ -192,6 +187,11 @@ model ProductSerials {
   salesReturnItems          SalesReturnItems[]
   exchangeItemSerialsOld    ExchangeItemSerials[]       @relation("OldProductSerials")
   exchangeItemSerialsNew    ExchangeItemSerials[]       @relation("NewProductSerials")
+}
+
+enum ProductType {
+  New
+  PreOwned
 }
 
 enum SerialStatus {
@@ -259,12 +259,16 @@ model SalesItems {
 }
 
 model SalesItemSerials {
-  id           Int @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   salesItem_id Int
   serial_id    Int
+  soldPrice    Decimal // Added: Price at which this serial was sold
+  soldAt       DateTime @default(now())
 
   SalesItems     SalesItems     @relation(fields: [salesItem_id], references: [id])
   ProductSerials ProductSerials @relation(fields: [serial_id], references: [id])
+
+  @@unique([salesItem_id, serial_id])
 }
 
 model SalesReturn {
@@ -300,12 +304,16 @@ model SalesReturnItems {
 }
 
 model SalesReturnItemSerials {
-  id                 Int @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   salesReturnItem_id Int
   serial_id          Int
+  returnedPrice      Decimal // Added: Price at which this serial was returned
+  returnedAt         DateTime @default(now())
 
   SalesReturnItems SalesReturnItems @relation(fields: [salesReturnItem_id], references: [id])
   ProductSerials   ProductSerials   @relation(fields: [serial_id], references: [id])
+
+  @@unique([salesReturnItem_id, serial_id])
 }
 
 // Exchanges and related models
@@ -347,14 +355,18 @@ model ExchangesItems {
 }
 
 model ExchangeItemSerials {
-  id              Int @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   exchangeItem_id Int
   serial_id_old   Int
   serial_id_new   Int
+  exchangePrice   Decimal // Added: Price at which this exchange happened
+  exchangedAt     DateTime @default(now())
 
   ExchangesItems    ExchangesItems @relation(fields: [exchangeItem_id], references: [id])
   OldProductSerials ProductSerials @relation("OldProductSerials", fields: [serial_id_old], references: [id])
   NewProductSerials ProductSerials @relation("NewProductSerials", fields: [serial_id_new], references: [id])
+
+  @@unique([exchangeItem_id, serial_id_old, serial_id_new])
 }
 
 // Purchases and related models
@@ -390,12 +402,16 @@ model PurchasesItems {
 }
 
 model PurchaseItemSerials {
-  id              Int @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   purchaseItem_id Int
   serial_id       Int
+  purchasedPrice  Decimal // Added: Price at which this serial was purchased
+  purchasedAt     DateTime @default(now())
 
   PurchasesItems PurchasesItems @relation(fields: [purchaseItem_id], references: [id])
   ProductSerials ProductSerials @relation(fields: [serial_id], references: [id])
+
+  @@unique([purchaseItem_id, serial_id])
 }
 
 model PurchasesReturn {
@@ -429,12 +445,16 @@ model PurchasesReturnItems {
 }
 
 model PurchaseReturnItemSerials {
-  id                    Int @id @default(autoincrement())
+  id                    Int      @id @default(autoincrement())
   purchaseReturnItem_id Int
   serial_id             Int
+  returnedPrice         Decimal // Added: Price at which this serial was returned to supplier
+  returnedAt            DateTime @default(now())
 
   PurchasesReturnItems PurchasesReturnItems @relation(fields: [purchaseReturnItem_id], references: [id])
   ProductSerials       ProductSerials       @relation(fields: [serial_id], references: [id])
+
+  @@unique([purchaseReturnItem_id, serial_id])
 }
 
 // Services and related models
