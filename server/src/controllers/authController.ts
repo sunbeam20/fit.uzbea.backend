@@ -136,7 +136,7 @@ export const login = async (req: Request, res: Response) => {
     console.log('User ID:', user.id);
     console.log('Stored password hash:', user.password);
     console.log('Password hash length:', user.password.length);
-    console.log('Password hash first 10 chars:', user.password.substring(0, 10));
+    console.log('Password hash first 10 chars:', user.password.substring(0, 60));
 
     // Check password
     console.log('Starting bcrypt compare...');
