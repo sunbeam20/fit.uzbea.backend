@@ -103,6 +103,10 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
+    console.log('=== LOGIN ATTEMPT ===');
+    console.log('Email:', email);
+    console.log('Password provided:', password);
+
     if (!email || !password) {
       return res.status(400).json({
         message: 'Email and password are required'
@@ -116,24 +120,38 @@ export const login = async (req: Request, res: Response) => {
         status: 'Active'
       },
       include: {
-        Roles: true  // This should be 'roles' if you changed it in schema
+        Roles: true
       }
     });
 
+    console.log('User found:', user ? 'YES' : 'NO');
+    
     if (!user) {
+      console.log('User not found or inactive');
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
+
+    console.log('User ID:', user.id);
+    console.log('Stored password hash:', user.password);
+    console.log('Password hash length:', user.password.length);
+    console.log('Password hash first 10 chars:', user.password.substring(0, 10));
 
     // Check password
+    console.log('Starting bcrypt compare...');
     const isValidPassword = await bcrypt.compare(password, user.password);
+    console.log('Bcrypt compare result:', isValidPassword);
+    
     if (!isValidPassword) {
+      console.log('Password comparison failed');
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
+    console.log('Password valid, generating token...');
+    
     // Generate token
     const token = jwt.sign(
       { 
@@ -147,6 +165,8 @@ export const login = async (req: Request, res: Response) => {
 
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = user;
+    console.log('Login successful for user:', user.email);
+    
     res.json({
       user: {
         ...userWithoutPassword,
