@@ -52,8 +52,8 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // TEMPORARY: Store plain text password (for testing only)
+    // const hashedPassword = await bcrypt.hash(password, 10); // REMOVED
 
     // Create user
     const user = await prisma.users.create({
@@ -61,12 +61,12 @@ export const register = async (req: Request, res: Response) => {
         userId: await generateId('users', 'USR'),
         name,
         email,
-        password: hashedPassword,
+        password: password, // Store plain text password
         role_id: defaultRole.id,
         status: 'Active',
       },
       include: {
-        Roles: true  // This should be 'roles' if you changed it in schema
+        Roles: true
       }
     });
 
@@ -103,7 +103,7 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    console.log('=== LOGIN ATTEMPT ===');
+    console.log('=== LOGIN ATTEMPT (PLAIN TEXT) ===');
     console.log('Email:', email);
     console.log('Password provided:', password);
 
@@ -134,14 +134,12 @@ export const login = async (req: Request, res: Response) => {
     }
 
     console.log('User ID:', user.id);
-    console.log('Stored password hash:', user.password);
-    console.log('Password hash length:', user.password.length);
-    console.log('Password hash first 10 chars:', user.password.substring(0, 60));
-
-    // Check password
-    console.log('Starting bcrypt compare...');
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    console.log('Bcrypt compare result:', isValidPassword);
+    console.log('Stored password (plain text):', user.password);
+    
+    // TEMPORARY: Direct plain text comparison (for testing only)
+    // const isValidPassword = await bcrypt.compare(password, user.password); // REMOVED
+    const isValidPassword = (password === user.password);
+    console.log('Password comparison result:', isValidPassword);
     
     if (!isValidPassword) {
       console.log('Password comparison failed');
@@ -202,7 +200,7 @@ export const getMe = async (req: Request, res: Response) => {
         status: 'Active'
       },
       include: {
-        Roles: true  // This should be 'roles' if you changed it in schema
+        Roles: true
       }
     });
 
@@ -227,8 +225,6 @@ export const getMe = async (req: Request, res: Response) => {
 };
 
 export const logout = async (req: Request, res: Response) => {
-  // Since we're using JWT tokens stored client-side, 
-  // the logout is handled client-side by removing the token
   res.json({ message: 'Logged out successfully' });
 };
 
@@ -258,7 +254,7 @@ export const authenticate = async (
       
       const user = await prisma.users.findUnique({
         where: { id: decoded.userId },
-        include: { Roles: true },  // This should be 'roles' if you changed it in schema
+        include: { Roles: true },
       });
 
       if (!user) {
