@@ -31,7 +31,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors({
   origin: [
-    'https://fit-uzbea-frontend.vercel.app'
+    'https://fit.uzbea.com/'
   ],
   credentials: true
 }));
