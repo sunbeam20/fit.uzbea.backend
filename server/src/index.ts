@@ -30,10 +30,9 @@ app.use(morgan("common"));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors({
-  origin: [
-    'https://fit.uzbea.com/'
-  ],
-  credentials: true
+  origin: 'https://fit.uzbea.com', // or '*' for development
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // ROUTES
